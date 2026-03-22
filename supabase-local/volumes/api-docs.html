@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase API Documentation</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #e0e0e0; }
+
+        .header { background: #16213e; padding: 20px 40px; border-bottom: 2px solid #0f3460; }
+        .header h1 { color: #3fc1c9; font-size: 24px; }
+        .header p { color: #999; margin-top: 5px; }
+
+        .tabs { display: flex; background: #16213e; padding: 0 40px; border-bottom: 1px solid #0f3460; }
+        .tab { padding: 12px 24px; cursor: pointer; color: #999; border-bottom: 3px solid transparent; transition: all 0.2s; }
+        .tab:hover { color: #e0e0e0; }
+        .tab.active { color: #3fc1c9; border-bottom-color: #3fc1c9; }
+
+        .content { padding: 20px 40px; }
+        .api-section { display: none; }
+        .api-section.active { display: block; }
+
+        .info-card { background: #16213e; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #0f3460; }
+        .info-card h3 { color: #3fc1c9; margin-bottom: 10px; }
+        .info-card code { background: #0f3460; padding: 2px 8px; border-radius: 4px; color: #e94560; }
+
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th { background: #0f3460; padding: 10px 15px; text-align: left; color: #3fc1c9; }
+        td { padding: 10px 15px; border-bottom: 1px solid #0f3460; }
+
+        .method { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; min-width: 60px; text-align: center; }
+        .method.get { background: #1b5e20; color: #81c784; }
+        .method.post { background: #1565c0; color: #64b5f6; }
+        .method.put { background: #e65100; color: #ffb74d; }
+        .method.patch { background: #e65100; color: #ffb74d; }
+        .method.delete { background: #b71c1c; color: #ef9a9a; }
+
+        .endpoint { font-family: monospace; color: #e0e0e0; }
+        .note { background: #1a237e; border-left: 4px solid #3fc1c9; padding: 12px 16px; margin: 15px 0; border-radius: 0 4px 4px 0; }
+
+        #swagger-rest { margin-top: 20px; }
+        .swagger-ui .topbar { display: none; }
+        .swagger-ui { background: transparent; }
+
+        .try-it { background: #16213e; border-radius: 8px; padding: 20px; margin: 15px 0; border: 1px solid #0f3460; }
+        .try-it pre { background: #0a0a1a; padding: 15px; border-radius: 4px; overflow-x: auto; color: #81c784; font-size: 13px; }
+
+        .config-table td:first-child { color: #3fc1c9; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Supabase Local — API Documentation</h1>
+    <p>Base URL: <code>http://localhost:8000</code> &nbsp;|&nbsp; All APIs require <code>apikey</code> header</p>
+</div>
+
+<div class="tabs">
+    <div class="tab active" onclick="showTab('overview')">Overview</div>
+    <div class="tab" onclick="showTab('rest')">REST API (DB)</div>
+    <div class="tab" onclick="showTab('auth')">Auth API</div>
+    <div class="tab" onclick="showTab('storage')">Storage API</div>
+    <div class="tab" onclick="showTab('realtime')">Realtime</div>
+    <div class="tab" onclick="showTab('functions')">Edge Functions</div>
+</div>
+
+<div class="content">
+
+    <!-- ===== OVERVIEW ===== -->
+    <div id="overview" class="api-section active">
+        <div class="info-card">
+            <h3>Authentication</h3>
+            <p>All API requests require the <code>apikey</code> header:</p>
+            <div class="try-it">
+                <pre>curl -H "apikey: YOUR_ANON_KEY" \
+     -H "Authorization: Bearer YOUR_ANON_KEY" \
+     http://localhost:8000/rest/v1/your_table</pre>
+            </div>
+            <p style="margin-top:10px">Two types of keys:</p>
+            <table>
+                <tr><th>Key</th><th>Role</th><th>Usage</th></tr>
+                <tr><td><code>ANON_KEY</code></td><td>anon</td><td>Client-side, respects RLS policies</td></tr>
+                <tr><td><code>SERVICE_ROLE_KEY</code></td><td>service_role</td><td>Server-side, bypasses RLS (admin)</td></tr>
+            </table>
+        </div>
+
+        <div class="info-card">
+            <h3>API Endpoints</h3>
+            <table>
+                <tr><th>API</th><th>Base Path</th><th>Description</th></tr>
+                <tr><td>REST (PostgREST)</td><td><code>/rest/v1/</code></td><td>Auto-generated CRUD from DB tables</td></tr>
+                <tr><td>Auth (GoTrue)</td><td><code>/auth/v1/</code></td><td>User signup, login, JWT tokens</td></tr>
+                <tr><td>Storage</td><td><code>/storage/v1/</code></td><td>File upload, download, management</td></tr>
+                <tr><td>Realtime</td><td><code>/realtime/v1/</code></td><td>WebSocket subscriptions</td></tr>
+                <tr><td>Edge Functions</td><td><code>/functions/v1/</code></td><td>Custom serverless functions</td></tr>
+            </table>
+        </div>
+
+        <div class="info-card">
+            <h3>Connection Info</h3>
+            <table class="config-table">
+                <tr><th>Service</th><th>URL</th></tr>
+                <tr><td>Studio Dashboard</td><td>http://localhost:8000</td></tr>
+                <tr><td>API Gateway</td><td>http://localhost:8000</td></tr>
+                <tr><td>PostgreSQL (session)</td><td>localhost:5432</td></tr>
+                <tr><td>PostgreSQL (pooled)</td><td>localhost:6543</td></tr>
+                <tr><td>Swagger UI</td><td>http://localhost:8888</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== REST API ===== -->
+    <div id="rest" class="api-section">
+        <div class="info-card">
+            <h3>REST API — Auto-generated from Database Tables</h3>
+            <p>PostgREST automatically creates REST endpoints for every table in the <code>public</code> schema.</p>
+            <div class="note">Create a table → API endpoint appears automatically. No code needed.</div>
+        </div>
+
+        <div class="info-card">
+            <h3>CRUD Operations</h3>
+            <table>
+                <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+                <tr><td><span class="method get">GET</span></td><td class="endpoint">/rest/v1/{table}</td><td>Select rows (with filtering, pagination)</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/rest/v1/{table}</td><td>Insert rows</td></tr>
+                <tr><td><span class="method patch">PATCH</span></td><td class="endpoint">/rest/v1/{table}?column=eq.value</td><td>Update rows matching filter</td></tr>
+                <tr><td><span class="method delete">DELETE</span></td><td class="endpoint">/rest/v1/{table}?column=eq.value</td><td>Delete rows matching filter</td></tr>
+            </table>
+        </div>
+
+        <div class="info-card">
+            <h3>Filtering & Querying</h3>
+            <table>
+                <tr><th>Operator</th><th>Example</th><th>Description</th></tr>
+                <tr><td><code>eq</code></td><td><code>?status=eq.active</code></td><td>Equal</td></tr>
+                <tr><td><code>neq</code></td><td><code>?status=neq.settled</code></td><td>Not equal</td></tr>
+                <tr><td><code>gt / gte</code></td><td><code>?amount=gt.100</code></td><td>Greater than (or equal)</td></tr>
+                <tr><td><code>lt / lte</code></td><td><code>?amount=lt.1000</code></td><td>Less than (or equal)</td></tr>
+                <tr><td><code>in</code></td><td><code>?status=in.(active,completed)</code></td><td>In list</td></tr>
+                <tr><td><code>is</code></td><td><code>?tx_hash=is.null</code></td><td>Is null</td></tr>
+                <tr><td><code>like</code></td><td><code>?name=like.*RPS*</code></td><td>Pattern match</td></tr>
+                <tr><td><code>order</code></td><td><code>?order=created_at.desc</code></td><td>Sort results</td></tr>
+                <tr><td><code>limit</code></td><td><code>?limit=10&offset=0</code></td><td>Pagination</td></tr>
+                <tr><td><code>select</code></td><td><code>?select=id,name,status</code></td><td>Select specific columns</td></tr>
+            </table>
+        </div>
+
+        <div class="info-card">
+            <h3>Examples</h3>
+            <div class="try-it">
+                <pre># Get all active contract templates
+curl "http://localhost:8000/rest/v1/contract_templates?is_active=eq.true" \
+  -H "apikey: ANON_KEY"
+
+# Get contract instances with status 'active', sorted by newest
+curl "http://localhost:8000/rest/v1/contract_instances?status=eq.active&order=created_at.desc" \
+  -H "apikey: ANON_KEY"
+
+# Insert a new contract template (admin)
+curl -X POST "http://localhost:8000/rest/v1/contract_templates" \
+  -H "apikey: SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "RPS Match", "type": "rps", "fee_rate": 5.0}'
+
+# Update contract status
+curl -X PATCH "http://localhost:8000/rest/v1/contract_instances?id=eq.UUID_HERE" \
+  -H "apikey: SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "active"}'
+
+# Get public ledger view
+curl "http://localhost:8000/rest/v1/public_ledger?order=created_at.desc&limit=50" \
+  -H "apikey: ANON_KEY"</pre>
+            </div>
+        </div>
+
+        <div id="swagger-rest"></div>
+    </div>
+
+    <!-- ===== AUTH API ===== -->
+    <div id="auth" class="api-section">
+        <div class="info-card">
+            <h3>Auth API — GoTrue</h3>
+            <p>User authentication, registration, and session management.</p>
+        </div>
+
+        <div class="info-card">
+            <h3>Endpoints</h3>
+            <table>
+                <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/auth/v1/signup</td><td>Register new user</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/auth/v1/token?grant_type=password</td><td>Login with email/password</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/auth/v1/token?grant_type=refresh_token</td><td>Refresh access token</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/auth/v1/logout</td><td>Logout (invalidate token)</td></tr>
+                <tr><td><span class="method get">GET</span></td><td class="endpoint">/auth/v1/user</td><td>Get current user info</td></tr>
+                <tr><td><span class="method put">PUT</span></td><td class="endpoint">/auth/v1/user</td><td>Update user (email, password, metadata)</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/auth/v1/recover</td><td>Send password recovery email</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/auth/v1/magiclink</td><td>Send magic link email</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/auth/v1/otp</td><td>Send OTP (phone/email)</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/auth/v1/verify</td><td>Verify OTP</td></tr>
+                <tr><td><span class="method get">GET</span></td><td class="endpoint">/auth/v1/settings</td><td>Get auth settings (public)</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/auth/v1/admin/users</td><td>Create user (admin)</td></tr>
+                <tr><td><span class="method get">GET</span></td><td class="endpoint">/auth/v1/admin/users</td><td>List users (admin)</td></tr>
+                <tr><td><span class="method get">GET</span></td><td class="endpoint">/auth/v1/admin/users/{id}</td><td>Get user by ID (admin)</td></tr>
+                <tr><td><span class="method put">PUT</span></td><td class="endpoint">/auth/v1/admin/users/{id}</td><td>Update user (admin)</td></tr>
+                <tr><td><span class="method delete">DELETE</span></td><td class="endpoint">/auth/v1/admin/users/{id}</td><td>Delete user (admin)</td></tr>
+            </table>
+        </div>
+
+        <div class="info-card">
+            <h3>Examples</h3>
+            <div class="try-it">
+                <pre># Sign up
+curl -X POST "http://localhost:8000/auth/v1/signup" \
+  -H "apikey: ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "password123"}'
+
+# Login
+curl -X POST "http://localhost:8000/auth/v1/token?grant_type=password" \
+  -H "apikey: ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "password123"}'
+
+# Get current user (with access token from login)
+curl "http://localhost:8000/auth/v1/user" \
+  -H "apikey: ANON_KEY" \
+  -H "Authorization: Bearer ACCESS_TOKEN"
+
+# Admin: list all users
+curl "http://localhost:8000/auth/v1/admin/users" \
+  -H "apikey: SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer SERVICE_ROLE_KEY"</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== STORAGE API ===== -->
+    <div id="storage" class="api-section">
+        <div class="info-card">
+            <h3>Storage API</h3>
+            <p>S3-compatible file storage for uploads, downloads, and management.</p>
+        </div>
+
+        <div class="info-card">
+            <h3>Bucket Management</h3>
+            <table>
+                <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+                <tr><td><span class="method get">GET</span></td><td class="endpoint">/storage/v1/bucket</td><td>List all buckets</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/storage/v1/bucket</td><td>Create bucket</td></tr>
+                <tr><td><span class="method get">GET</span></td><td class="endpoint">/storage/v1/bucket/{id}</td><td>Get bucket details</td></tr>
+                <tr><td><span class="method put">PUT</span></td><td class="endpoint">/storage/v1/bucket/{id}</td><td>Update bucket</td></tr>
+                <tr><td><span class="method delete">DELETE</span></td><td class="endpoint">/storage/v1/bucket/{id}</td><td>Delete bucket</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/storage/v1/bucket/{id}/empty</td><td>Empty bucket</td></tr>
+            </table>
+        </div>
+
+        <div class="info-card">
+            <h3>File Operations</h3>
+            <table>
+                <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/storage/v1/object/{bucket}/{path}</td><td>Upload file</td></tr>
+                <tr><td><span class="method get">GET</span></td><td class="endpoint">/storage/v1/object/{bucket}/{path}</td><td>Download file</td></tr>
+                <tr><td><span class="method put">PUT</span></td><td class="endpoint">/storage/v1/object/{bucket}/{path}</td><td>Update file</td></tr>
+                <tr><td><span class="method delete">DELETE</span></td><td class="endpoint">/storage/v1/object/{bucket}/{paths}</td><td>Delete file(s)</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/storage/v1/object/list/{bucket}</td><td>List files in bucket</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/storage/v1/object/move</td><td>Move file</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/storage/v1/object/copy</td><td>Copy file</td></tr>
+                <tr><td><span class="method get">GET</span></td><td class="endpoint">/storage/v1/object/public/{bucket}/{path}</td><td>Get public URL</td></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/storage/v1/object/sign/{bucket}/{path}</td><td>Create signed URL</td></tr>
+            </table>
+        </div>
+
+        <div class="info-card">
+            <h3>Examples</h3>
+            <div class="try-it">
+                <pre># Create a bucket
+curl -X POST "http://localhost:8000/storage/v1/bucket" \
+  -H "apikey: SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"id": "avatars", "name": "avatars", "public": true}'
+
+# Upload a file
+curl -X POST "http://localhost:8000/storage/v1/object/avatars/user1.png" \
+  -H "apikey: ANON_KEY" \
+  -H "Authorization: Bearer ACCESS_TOKEN" \
+  -H "Content-Type: image/png" \
+  --data-binary @photo.png
+
+# List files
+curl -X POST "http://localhost:8000/storage/v1/object/list/avatars" \
+  -H "apikey: ANON_KEY" \
+  -H "Authorization: Bearer ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"prefix": "", "limit": 100}'</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== REALTIME ===== -->
+    <div id="realtime" class="api-section">
+        <div class="info-card">
+            <h3>Realtime — WebSocket Subscriptions</h3>
+            <p>Subscribe to database changes in real-time via WebSocket. No REST API — uses WebSocket protocol.</p>
+        </div>
+
+        <div class="info-card">
+            <h3>Connection</h3>
+            <div class="try-it">
+                <pre>WebSocket URL: ws://localhost:8000/realtime/v1/websocket?apikey=ANON_KEY&vsn=1.0.0</pre>
+            </div>
+        </div>
+
+        <div class="info-card">
+            <h3>JavaScript Client Example</h3>
+            <div class="try-it">
+                <pre>import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient('http://localhost:8000', 'ANON_KEY')
+
+// Subscribe to contract status changes
+supabase
+  .channel('contract-updates')
+  .on('postgres_changes',
+    { event: 'UPDATE', schema: 'public', table: 'contract_instances' },
+    (payload) => {
+      console.log('Contract updated:', payload.new.id, payload.new.status)
+    }
+  )
+  .subscribe()
+
+// Subscribe to new results
+supabase
+  .channel('results')
+  .on('postgres_changes',
+    { event: 'INSERT', schema: 'public', table: 'contract_results' },
+    (payload) => {
+      console.log('New result:', payload.new)
+    }
+  )
+  .subscribe()</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== EDGE FUNCTIONS ===== -->
+    <div id="functions" class="api-section">
+        <div class="info-card">
+            <h3>Edge Functions — Deno Serverless</h3>
+            <p>Custom server-side logic written in TypeScript/JavaScript, running on Deno.</p>
+        </div>
+
+        <div class="info-card">
+            <h3>Invoke Function</h3>
+            <table>
+                <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+                <tr><td><span class="method post">POST</span></td><td class="endpoint">/functions/v1/{function_name}</td><td>Invoke an edge function</td></tr>
+            </table>
+        </div>
+
+        <div class="info-card">
+            <h3>Example</h3>
+            <div class="try-it">
+                <pre># Invoke a function
+curl -X POST "http://localhost:8000/functions/v1/my-function" \
+  -H "apikey: ANON_KEY" \
+  -H "Authorization: Bearer ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "world"}'</pre>
+            </div>
+            <div class="note">
+                Functions are stored in <code>volumes/functions/</code>.
+                Each subfolder = one function. The <code>main</code> function is the entry point.
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+function showTab(tabName) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.api-section').forEach(s => s.classList.remove('active'));
+    document.getElementById(tabName).classList.add('active');
+    event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

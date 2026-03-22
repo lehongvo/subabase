@@ -20,6 +20,15 @@ services:
     environment:
       URL: /swagger.json
 
+  api-docs:
+    container_name: supabase-api-docs
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - 8889:80
+    volumes:
+      - ./volumes/api-docs.html:/usr/share/nginx/html/index.html:ro
+
 
   studio:
     container_name: supabase-studio
