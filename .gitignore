@@ -34,9 +34,13 @@ docker-compose.override.yml
 docker-compose.override.yaml
 .docker/
 
+# Supabase self-hosted (local): DB files & object storage (generated)
+supabase-local/volumes/db/data/
+supabase-local/volumes/storage/
+
 # --- Logs & temp ---
 *.log
-logs/
+/logs/
 tmp/
 temp/
 *.pid
