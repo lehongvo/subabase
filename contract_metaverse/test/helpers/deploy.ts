@@ -249,6 +249,7 @@ export async function deployFullSystem() {
     outsider,
     // Clients
     publicClient,
+    testClient,
   };
 }
 

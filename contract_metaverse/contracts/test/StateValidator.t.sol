@@ -27,7 +27,7 @@ contract StateValidatorTest is Test {
     }
 
     // ========================================================================
-    // Valid transitions (6 tests)
+    // Valid transitions (8 tests)
     // ========================================================================
 
     /// @notice Created -> Active is valid
@@ -90,9 +90,9 @@ contract StateValidatorTest is Test {
         ));
     }
 
-    /// @notice Created -> Settled is invalid
-    function test_invalidTransition_CreatedToSettled() public pure {
-        assertFalse(StateValidator.isValidTransition(
+    /// @notice Created -> Settled is valid (cancellation path)
+    function test_validTransition_CreatedToSettled() public pure {
+        assertTrue(StateValidator.isValidTransition(
             Types.ContractStatus.Created,
             Types.ContractStatus.Settled
         ));
@@ -149,13 +149,13 @@ contract StateValidatorTest is Test {
                 Types.InvalidTransition.selector,
                 DUMMY_ID,
                 Types.ContractStatus.Created,
-                Types.ContractStatus.Settled
+                Types.ContractStatus.Completed
             )
         );
         harness.validateTransition(
             DUMMY_ID,
             Types.ContractStatus.Created,
-            Types.ContractStatus.Settled
+            Types.ContractStatus.Completed
         );
     }
 
@@ -173,7 +173,7 @@ contract StateValidatorTest is Test {
     // Fuzz tests
     // ========================================================================
 
-    /// @notice Fuzz: random state pairs — only 6 specific combos are valid
+    /// @notice Fuzz: random state pairs — only 8 specific combos are valid
     function testFuzz_isValidTransition_RandomPairs(uint8 fromRaw, uint8 toRaw) public pure {
         fromRaw = uint8(bound(fromRaw, 0, 5));
         toRaw = uint8(bound(toRaw, 0, 5));
@@ -183,10 +183,12 @@ contract StateValidatorTest is Test {
 
         bool result = StateValidator.isValidTransition(from, to);
 
-        // Manually check expected valid transitions
+        // Manually check expected valid transitions (8 total)
         bool expected = false;
         if (from == Types.ContractStatus.Created && to == Types.ContractStatus.Active) expected = true;
+        if (from == Types.ContractStatus.Created && to == Types.ContractStatus.Settled) expected = true;
         if (from == Types.ContractStatus.Active && to == Types.ContractStatus.Completed) expected = true;
+        if (from == Types.ContractStatus.Active && to == Types.ContractStatus.Settled) expected = true;
         if (from == Types.ContractStatus.Completed && to == Types.ContractStatus.Settled) expected = true;
         if (from == Types.ContractStatus.Completed && to == Types.ContractStatus.Disputed) expected = true;
         if (from == Types.ContractStatus.Disputed && to == Types.ContractStatus.Resolved) expected = true;

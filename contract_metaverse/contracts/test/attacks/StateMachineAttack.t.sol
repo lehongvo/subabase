@@ -11,8 +11,11 @@ import {Types} from "../../libraries/Types.sol";
 ///
 ///        Valid state machine:
 ///          Created -> Active -> Completed -> Settled
-///                                   |
-///                               Disputed -> Resolved -> Settled
+///              |         |           |
+///              |         |       Disputed -> Resolved -> Settled
+///              |         |
+///              +-> Settled (cancellation)
+///              Active -> Settled (cancellation)
 ///
 ///        All other transitions must revert with InvalidTransition.
 contract StateMachineAttackTest is TestSetup {
@@ -44,18 +47,15 @@ contract StateMachineAttackTest is TestSetup {
         instances.completeInstance(instanceId);
     }
 
-    /// @notice Created -> Settled directly (skipping Active, Completed) must revert
-    function test_skip_created_to_settled_reverts() public {
+    /// @notice Created -> Settled directly is now valid (cancellation path)
+    function test_created_to_settled_succeeds() public {
         vm.prank(address(settlements));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Types.InvalidTransition.selector,
-                instanceId,
-                Types.ContractStatus.Created,
-                Types.ContractStatus.Settled
-            )
-        );
         instances.settleInstance(instanceId);
+
+        assertEq(
+            uint8(instances.getInstanceStatus(instanceId)),
+            uint8(Types.ContractStatus.Settled)
+        );
     }
 
     /// @notice Created -> Disputed directly must revert
@@ -86,20 +86,17 @@ contract StateMachineAttackTest is TestSetup {
         instances.resolveInstance(instanceId);
     }
 
-    /// @notice Active -> Settled directly (skipping Completed) must revert
-    function test_skip_active_to_settled_reverts() public {
+    /// @notice Active -> Settled directly is now valid (cancellation path)
+    function test_active_to_settled_succeeds() public {
         _activate(instanceId);
 
         vm.prank(address(settlements));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Types.InvalidTransition.selector,
-                instanceId,
-                Types.ContractStatus.Active,
-                Types.ContractStatus.Settled
-            )
-        );
         instances.settleInstance(instanceId);
+
+        assertEq(
+            uint8(instances.getInstanceStatus(instanceId)),
+            uint8(Types.ContractStatus.Settled)
+        );
     }
 
     /// @notice Active -> Disputed directly (skipping Completed) must revert

@@ -208,50 +208,30 @@ describe("Dispute Flow", () => {
       const deadline = await sys.consents.read.getConsentDeadline([instanceId]);
       assert.ok(deadline > 0, "Deadline should be set");
 
-      // Advance time past the deadline using Hardhat's provider
-      const { provider } = await network.connect();
-      const { viem } = await network.connect();
-      const publicClient = await viem.getPublicClient();
-
-      // Advance time by mining blocks using test client
-      const { viem: viem2 } = await network.connect();
-      const testClient = await viem2.getTestClient();
-
-      // Debug: check current state
-      const blockBefore = await sys.publicClient.getBlock();
-      console.log(`Before mine: blockNum=${blockBefore.number}, blockTime=${blockBefore.timestamp}, deadline=${deadline}`);
-
-      // Use test client to mine blocks (each block should advance time by 1)
-      await testClient.mine({ blocks: 1 });
-
-      let blockAfter = await sys.publicClient.getBlock();
-      console.log(`After 1 mine: blockNum=${blockAfter.number}, blockTime=${blockAfter.timestamp}`);
-
-      // Try setNextBlockTimestamp
+      // Advance block timestamp well past the consent deadline
+      // IMPORTANT: use sys.testClient (same network connection as the deployed contracts)
       const targetTimestamp = BigInt(deadline) + 600n;
-      await testClient.setNextBlockTimestamp({ timestamp: targetTimestamp });
-      await testClient.mine({ blocks: 1 });
+      await sys.testClient.setNextBlockTimestamp({ timestamp: targetTimestamp });
+      await sys.testClient.mine({ blocks: 1 });
 
-      blockAfter = await sys.publicClient.getBlock();
-      console.log(`After setNextBlockTimestamp + mine: blockNum=${blockAfter.number}, blockTime=${blockAfter.timestamp}`);
-
-      // Verify block timestamp
-      const block = await publicClient.getBlock();
+      // Verify block timestamp using sys.publicClient (same network)
+      const block = await sys.publicClient.getBlock();
       assert.ok(
         block.timestamp > BigInt(deadline),
         `Block time ${block.timestamp} should exceed deadline ${deadline}`
       );
 
+      // autoConsent should now succeed since block time is past deadline
       await sys.consents.write.autoConsent([
         instanceId,
         sys.playerB.account.address,
-      ], { gas: 500_000n });
+      ]);
 
       const allDone = await sys.consents.read.allConsented([instanceId]);
       assert.ok(allDone);
 
       // Settle
-      await sys.settlements.write.settleContract([instanceId], { gas: 1_000_000n });
+      await sys.settlements.write.settleContract([instanceId]);
       const status = await sys.instances.read.getInstanceStatus([instanceId]);
       assert.equal(status, 5); // Settled
     });

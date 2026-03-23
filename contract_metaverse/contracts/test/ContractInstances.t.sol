@@ -172,12 +172,14 @@ contract ContractInstancesTest is TestSetup {
         instances.resolveInstance(instanceId);
     }
 
-    /// @notice Created -> Settled: invalid
-    function testRevert_transition_CreatedToSettled() public {
+    /// @notice Created -> Settled: valid (cancellation path)
+    function test_transition_CreatedToSettled() public {
         bytes32 instanceId = _createInstance(templateId);
         vm.prank(address(settlements));
-        vm.expectRevert();
         instances.settleInstance(instanceId);
+
+        Types.ContractStatus status = instances.getInstanceStatus(instanceId);
+        assertEq(uint8(status), uint8(Types.ContractStatus.Settled));
     }
 
     /// @notice Active -> Disputed: invalid (must go through Completed first)
@@ -192,16 +194,18 @@ contract ContractInstancesTest is TestSetup {
         instances.disputeInstance(instanceId);
     }
 
-    /// @notice Active -> Settled: invalid
-    function testRevert_transition_ActiveToSettled() public {
+    /// @notice Active -> Settled: valid (cancellation path)
+    function test_transition_ActiveToSettled() public {
         bytes32 instanceId = _createInstance(templateId);
         _aliceJoins(instanceId);
         _bobJoins(instanceId);
         _activate(instanceId);
 
         vm.prank(address(settlements));
-        vm.expectRevert();
         instances.settleInstance(instanceId);
+
+        Types.ContractStatus status = instances.getInstanceStatus(instanceId);
+        assertEq(uint8(status), uint8(Types.ContractStatus.Settled));
     }
 
     /// @notice Active -> Resolved: invalid
