@@ -168,12 +168,12 @@ describe("Dispute Flow", () => {
 
     before(async () => {
       sys = await deployFullSystem();
-      // Use a short timeout of 15 seconds
-      const setup = await setupCompletedInstance(sys, 15n);
+      // Use the minimum enforceable timeout of 10 seconds
+      const setup = await setupCompletedInstance(sys, 10n);
       instanceId = setup.instanceId;
     });
 
-    it("should allow A to consent normally", async () => {
+    it("should allow A to consent normally and set deadline", async () => {
       await sys.consents.write.submitConsent([
         instanceId,
         sys.playerA.account.address,
@@ -184,6 +184,10 @@ describe("Dispute Flow", () => {
 
       const count = await sys.consents.read.getConsentCount([instanceId]);
       assert.equal(count, 1);
+
+      // Verify deadline is set
+      const deadline = await sys.consents.read.getConsentDeadline([instanceId]);
+      assert.ok(deadline > 0, `Consent deadline should be set, got ${deadline}`);
     });
 
     it("should reject autoConsent before timeout expires", async () => {
@@ -199,24 +203,55 @@ describe("Dispute Flow", () => {
       );
     });
 
-    it("should allow autoConsent after timeout expires", async () => {
-      // Advance time by 20 seconds (beyond the 15s timeout)
+    it("should allow autoConsent after timeout expires and then settle", async () => {
+      // Read the consent deadline
+      const deadline = await sys.consents.read.getConsentDeadline([instanceId]);
+      assert.ok(deadline > 0, "Deadline should be set");
+
+      // Advance time past the deadline using Hardhat's provider
+      const { provider } = await network.connect();
       const { viem } = await network.connect();
-      const testClient = await viem.getTestClient();
-      await testClient.increaseTime({ seconds: 20 });
+      const publicClient = await viem.getPublicClient();
+
+      // Advance time by mining blocks using test client
+      const { viem: viem2 } = await network.connect();
+      const testClient = await viem2.getTestClient();
+
+      // Debug: check current state
+      const blockBefore = await sys.publicClient.getBlock();
+      console.log(`Before mine: blockNum=${blockBefore.number}, blockTime=${blockBefore.timestamp}, deadline=${deadline}`);
+
+      // Use test client to mine blocks (each block should advance time by 1)
       await testClient.mine({ blocks: 1 });
+
+      let blockAfter = await sys.publicClient.getBlock();
+      console.log(`After 1 mine: blockNum=${blockAfter.number}, blockTime=${blockAfter.timestamp}`);
+
+      // Try setNextBlockTimestamp
+      const targetTimestamp = BigInt(deadline) + 600n;
+      await testClient.setNextBlockTimestamp({ timestamp: targetTimestamp });
+      await testClient.mine({ blocks: 1 });
+
+      blockAfter = await sys.publicClient.getBlock();
+      console.log(`After setNextBlockTimestamp + mine: blockNum=${blockAfter.number}, blockTime=${blockAfter.timestamp}`);
+
+      // Verify block timestamp
+      const block = await publicClient.getBlock();
+      assert.ok(
+        block.timestamp > BigInt(deadline),
+        `Block time ${block.timestamp} should exceed deadline ${deadline}`
+      );
 
       await sys.consents.write.autoConsent([
         instanceId,
         sys.playerB.account.address,
-      ]);
+      ], { gas: 500_000n });
 
       const allDone = await sys.consents.read.allConsented([instanceId]);
       assert.ok(allDone);
-    });
 
-    it("should settle after auto-consent", async () => {
-      await sys.settlements.write.settleContract([instanceId]);
+      // Settle
+      await sys.settlements.write.settleContract([instanceId], { gas: 1_000_000n });
       const status = await sys.instances.read.getInstanceStatus([instanceId]);
       assert.equal(status, 5); // Settled
     });

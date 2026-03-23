@@ -98,9 +98,9 @@ contract StateValidatorTest is Test {
         ));
     }
 
-    /// @notice Active -> Settled is invalid
-    function test_invalidTransition_ActiveToSettled() public pure {
-        assertFalse(StateValidator.isValidTransition(
+    /// @notice Active -> Settled is valid (cancellation path)
+    function test_validTransition_ActiveToSettled() public pure {
+        assertTrue(StateValidator.isValidTransition(
             Types.ContractStatus.Active,
             Types.ContractStatus.Settled
         ));

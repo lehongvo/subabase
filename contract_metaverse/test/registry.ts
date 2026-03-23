@@ -11,7 +11,6 @@ import {
   createRPSTemplate,
   encodeConditions,
   encodeRewardRules,
-  getContractAsUser,
 } from "./helpers/deploy.js";
 
 describe("Registry (ContractTemplates)", () => {
@@ -143,12 +142,6 @@ describe("Registry (ContractTemplates)", () => {
   // ========================================================================
 
   it("should revert when non-admin tries to create template", async () => {
-    const outsiderTemplates = await getContractAsUser(
-      "ContractTemplates",
-      sys.templates.address,
-      sys.outsider.account.address
-    );
-
     const conditions = encodeConditions(
       parseEther("10"),
       parseEther("100"),
@@ -159,21 +152,23 @@ describe("Registry (ContractTemplates)", () => {
 
     await assert.rejects(
       async () => {
-        await outsiderTemplates.write.createTemplate([
-          "RPS Outsider",
-          0,
-          conditions,
-          rewardRules,
-          1,
-          300,
-          0,
-          "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`,
-        ]);
+        await sys.outsider.writeContract({
+          address: sys.templates.address,
+          abi: sys.templates.abi,
+          functionName: "createTemplate",
+          args: [
+            "RPS Outsider",
+            0,
+            conditions,
+            rewardRules,
+            1,
+            300,
+            0,
+            "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`,
+          ],
+        });
       },
-      (err: any) => {
-        // AccessControl revert
-        return true;
-      },
+      (err: any) => true,
       "Non-admin should not be able to create templates"
     );
   });
@@ -183,15 +178,14 @@ describe("Registry (ContractTemplates)", () => {
       name: "RPS Admin Deactivate Guard",
     });
 
-    const outsiderTemplates = await getContractAsUser(
-      "ContractTemplates",
-      sys.templates.address,
-      sys.outsider.account.address
-    );
-
     await assert.rejects(
       async () => {
-        await outsiderTemplates.write.deactivateTemplate([templateId]);
+        await sys.outsider.writeContract({
+          address: sys.templates.address,
+          abi: sys.templates.abi,
+          functionName: "deactivateTemplate",
+          args: [templateId],
+        });
       },
       (err: any) => true,
       "Non-admin should not be able to deactivate templates"
@@ -204,15 +198,14 @@ describe("Registry (ContractTemplates)", () => {
     });
     await sys.templates.write.deactivateTemplate([templateId]);
 
-    const outsiderTemplates = await getContractAsUser(
-      "ContractTemplates",
-      sys.templates.address,
-      sys.outsider.account.address
-    );
-
     await assert.rejects(
       async () => {
-        await outsiderTemplates.write.activateTemplate([templateId]);
+        await sys.outsider.writeContract({
+          address: sys.templates.address,
+          abi: sys.templates.abi,
+          functionName: "activateTemplate",
+          args: [templateId],
+        });
       },
       (err: any) => true,
       "Non-admin should not be able to activate templates"
