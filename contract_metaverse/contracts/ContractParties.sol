@@ -3,7 +3,7 @@ pragma solidity ^0.8.27;
 
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -22,7 +22,7 @@ import {Types} from "./libraries/Types.sol";
 contract ContractParties is
     Initializable,
     AccessControlUpgradeable,
-    ReentrancyGuardUpgradeable,
+    ReentrancyGuard,
     PausableUpgradeable,
     IContractParties
 {
@@ -92,7 +92,7 @@ contract ContractParties is
         if (tokenAddress == address(0)) revert Types.ZeroAddress();
 
         __AccessControl_init();
-        __ReentrancyGuard_init();
+        // ReentrancyGuard v5.6 uses transient storage, no init needed
         __Pausable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
