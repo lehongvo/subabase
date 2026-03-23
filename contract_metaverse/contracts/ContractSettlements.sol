@@ -267,7 +267,9 @@ contract ContractSettlements is
         // --- Interactions ---
         // Release escrow: winner gets winnerAmount, treasury gets feeAmount
         _partiesContract.releaseEscrow(instanceId, winnerId, winnerAmount);
-        _partiesContract.releaseEscrow(instanceId, _treasury, feeAmount);
+        if (feeAmount > 0) {
+            _partiesContract.releaseEscrow(instanceId, _treasury, feeAmount);
+        }
 
         // Transition instance to Settled
         _instancesContract.settleInstance(instanceId);

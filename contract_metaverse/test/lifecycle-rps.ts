@@ -15,7 +15,7 @@ import {
   createRPSTemplate,
   mintAndApprove,
   encodeResultData,
-  getContractAsUser,
+  joinContractAs,
   CHALLENGER_ROLE,
   OPPONENT_ROLE,
 } from "./helpers/deploy.js";
@@ -57,19 +57,7 @@ describe("Lifecycle: Full RPS Walkthrough", () => {
   });
 
   it("should allow player A to join with 50e18 escrow", async () => {
-    const partiesA = await getContractAsUser(
-      "ContractParties",
-      sys.parties.address,
-      sys.playerA.account.address
-    );
-    const joinHash = await partiesA.write.joinContract([
-      instanceId,
-      CHALLENGER_ROLE,
-      betAmount,
-      1, // IXFreePoint
-    ]);
-    const joinReceipt = await sys.publicClient.waitForTransactionReceipt({ hash: joinHash });
-    assert.equal(joinReceipt.status, "success", "Player A join tx should succeed");
+    await joinContractAs(sys, sys.playerA, instanceId, CHALLENGER_ROLE, betAmount, 1);
 
     const hasJoined = await sys.parties.read.hasJoined([
       instanceId,
@@ -85,19 +73,7 @@ describe("Lifecycle: Full RPS Walkthrough", () => {
   });
 
   it("should allow player B to join with 50e18 escrow", async () => {
-    const partiesB = await getContractAsUser(
-      "ContractParties",
-      sys.parties.address,
-      sys.playerB.account.address
-    );
-    const joinHash = await partiesB.write.joinContract([
-      instanceId,
-      OPPONENT_ROLE,
-      betAmount,
-      1, // IXFreePoint
-    ]);
-    const joinReceipt = await sys.publicClient.waitForTransactionReceipt({ hash: joinHash });
-    assert.equal(joinReceipt.status, "success", "Player B join tx should succeed");
+    await joinContractAs(sys, sys.playerB, instanceId, OPPONENT_ROLE, betAmount, 1);
 
     const hasJoined = await sys.parties.read.hasJoined([
       instanceId,

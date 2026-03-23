@@ -5,8 +5,34 @@ import {Test} from "forge-std/Test.sol";
 import {FeeCalculator} from "../libraries/FeeCalculator.sol";
 import {Types} from "../libraries/Types.sol";
 
+/// @title FeeCalculatorHarness -- Wrapper to call library functions externally
+/// @dev Required because vm.expectRevert() does not work with inlined library calls
+contract FeeCalculatorHarness {
+    function calculateFee(uint128 totalEscrow, uint16 feeRateBps)
+        external
+        pure
+        returns (uint128, uint128)
+    {
+        return FeeCalculator.calculateFee(totalEscrow, feeRateBps);
+    }
+
+    function calculateDrawRefund(uint128 totalEscrow, uint8 partyCount)
+        external
+        pure
+        returns (uint128)
+    {
+        return FeeCalculator.calculateDrawRefund(totalEscrow, partyCount);
+    }
+}
+
 /// @title FeeCalculatorTest -- Tests for fee calculation library
 contract FeeCalculatorTest is Test {
+    FeeCalculatorHarness internal harness;
+
+    function setUp() public {
+        harness = new FeeCalculatorHarness();
+    }
+
     // ========================================================================
     // calculateFee
     // ========================================================================
@@ -35,13 +61,13 @@ contract FeeCalculatorTest is Test {
     /// @notice Over 50% fee rate reverts
     function testRevert_calculateFee_OverFiftyPercent() public {
         vm.expectRevert(abi.encodeWithSelector(Types.InvalidFeeRate.selector, uint16(5001)));
-        FeeCalculator.calculateFee(100e18, 5001);
+        harness.calculateFee(100e18, 5001);
     }
 
     /// @notice Zero totalEscrow reverts
     function testRevert_calculateFee_ZeroEscrow() public {
         vm.expectRevert(abi.encodeWithSelector(Types.InvalidAmount.selector));
-        FeeCalculator.calculateFee(0, 300);
+        harness.calculateFee(0, 300);
     }
 
     /// @notice winnerAmount + feeAmount always equals totalEscrow (invariant)
@@ -88,12 +114,12 @@ contract FeeCalculatorTest is Test {
     /// @notice Draw refund reverts with zero escrow
     function testRevert_calculateDrawRefund_ZeroEscrow() public {
         vm.expectRevert(abi.encodeWithSelector(Types.InvalidAmount.selector));
-        FeeCalculator.calculateDrawRefund(0, 2);
+        harness.calculateDrawRefund(0, 2);
     }
 
     /// @notice Draw refund reverts with zero party count
     function testRevert_calculateDrawRefund_ZeroPartyCount() public {
         vm.expectRevert(abi.encodeWithSelector(Types.InvalidAmount.selector));
-        FeeCalculator.calculateDrawRefund(100e18, 0);
+        harness.calculateDrawRefund(100e18, 0);
     }
 }

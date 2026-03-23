@@ -10,7 +10,7 @@ import {
   createRPSTemplate,
   mintAndApprove,
   encodeResultData,
-  getContractAsUser,
+  joinContractAs,
   runFullRPSLifecycle,
   CHALLENGER_ROLE,
   OPPONENT_ROLE,
@@ -44,21 +44,17 @@ describe("Edge Cases", () => {
     });
     const instanceId = receipt.logs[0].topics[1] as `0x${string}`;
 
-    const partiesA = await getContractAsUser(
-      "ContractParties",
-      sys.parties.address,
-      sys.playerA.account.address
-    );
-
     // Try to join with 5e18 (below min of 10e18)
     await assert.rejects(
       async () => {
-        await partiesA.write.joinContract([
+        await joinContractAs(
+          sys,
+          sys.playerA,
           instanceId,
           CHALLENGER_ROLE,
           parseEther("5"), // below min_bet of 10
-          1,
-        ]);
+          1
+        );
       },
       (err: any) => true,
       "Bet below minimum should revert with BetOutOfRange"
@@ -75,14 +71,23 @@ describe("Edge Cases", () => {
       maxBet: parseEther("100"),
     });
 
-    // Mint extra tokens
+    // Mint extra tokens to playerA
     await sys.token.write.mint([sys.playerA.account.address, parseEther("200")]);
-    const tokenA = await getContractAsUser(
-      "MockIXToken",
-      sys.token.address,
-      sys.playerA.account.address
-    );
-    await tokenA.write.approve([sys.parties.address, parseEther("200")]);
+    await sys.playerA.writeContract({
+      address: sys.token.address,
+      abi: [{
+        name: "approve",
+        type: "function" as const,
+        inputs: [
+          { name: "spender", type: "address" as const },
+          { name: "amount", type: "uint256" as const },
+        ],
+        outputs: [{ type: "bool" as const }],
+        stateMutability: "nonpayable" as const,
+      }],
+      functionName: "approve",
+      args: [sys.parties.address, parseEther("200")],
+    });
 
     const createHash = await sys.instances.write.createInstance([
       templateId,
@@ -93,21 +98,17 @@ describe("Edge Cases", () => {
     });
     const instanceId = receipt.logs[0].topics[1] as `0x${string}`;
 
-    const partiesA = await getContractAsUser(
-      "ContractParties",
-      sys.parties.address,
-      sys.playerA.account.address
-    );
-
     // Try to join with 150e18 (above max of 100e18)
     await assert.rejects(
       async () => {
-        await partiesA.write.joinContract([
+        await joinContractAs(
+          sys,
+          sys.playerA,
           instanceId,
           CHALLENGER_ROLE,
           parseEther("150"), // above max_bet of 100
-          1,
-        ]);
+          1
+        );
       },
       (err: any) => true,
       "Bet above maximum should revert with BetOutOfRange"
@@ -135,29 +136,35 @@ describe("Edge Cases", () => {
     // Deactivate the template
     await sys.templates.write.deactivateTemplate([templateId]);
 
+    // Mint and approve for playerA
     await sys.token.write.mint([sys.playerA.account.address, parseEther("100")]);
-    const tokenA = await getContractAsUser(
-      "MockIXToken",
-      sys.token.address,
-      sys.playerA.account.address
-    );
-    await tokenA.write.approve([sys.parties.address, parseEther("100")]);
-
-    const partiesA = await getContractAsUser(
-      "ContractParties",
-      sys.parties.address,
-      sys.playerA.account.address
-    );
+    await sys.playerA.writeContract({
+      address: sys.token.address,
+      abi: [{
+        name: "approve",
+        type: "function" as const,
+        inputs: [
+          { name: "spender", type: "address" as const },
+          { name: "amount", type: "uint256" as const },
+        ],
+        outputs: [{ type: "bool" as const }],
+        stateMutability: "nonpayable" as const,
+      }],
+      functionName: "approve",
+      args: [sys.parties.address, parseEther("100")],
+    });
 
     // Attempt to join with inactive template
     await assert.rejects(
       async () => {
-        await partiesA.write.joinContract([
+        await joinContractAs(
+          sys,
+          sys.playerA,
           instanceId,
           CHALLENGER_ROLE,
           parseEther("50"),
-          1,
-        ]);
+          1
+        );
       },
       (err: any) => true,
       "Joining contract with inactive template should revert"
@@ -208,30 +215,10 @@ describe("Edge Cases", () => {
     const instanceId = receipt.logs[0].topics[1] as `0x${string}`;
 
     // A joins
-    const partiesA = await getContractAsUser(
-      "ContractParties",
-      freshSys.parties.address,
-      freshSys.playerA.account.address
-    );
-    await partiesA.write.joinContract([
-      instanceId,
-      CHALLENGER_ROLE,
-      parseEther("50"),
-      1,
-    ]);
+    await joinContractAs(freshSys, freshSys.playerA, instanceId, CHALLENGER_ROLE, parseEther("50"), 1);
 
     // B joins
-    const partiesB = await getContractAsUser(
-      "ContractParties",
-      freshSys.parties.address,
-      freshSys.playerB.account.address
-    );
-    await partiesB.write.joinContract([
-      instanceId,
-      OPPONENT_ROLE,
-      parseEther("50"),
-      1,
-    ]);
+    await joinContractAs(freshSys, freshSys.playerB, instanceId, OPPONENT_ROLE, parseEther("50"), 1);
 
     // Activate
     await freshSys.instances.write.activateInstance([instanceId]);
@@ -242,27 +229,32 @@ describe("Edge Cases", () => {
 
     // outsider tries to join after activation
     await freshSys.token.write.mint([freshSys.outsider.account.address, parseEther("100")]);
-    const tokenOutsider = await getContractAsUser(
-      "MockIXToken",
-      freshSys.token.address,
-      freshSys.outsider.account.address
-    );
-    await tokenOutsider.write.approve([freshSys.parties.address, parseEther("100")]);
-
-    const partiesOutsider = await getContractAsUser(
-      "ContractParties",
-      freshSys.parties.address,
-      freshSys.outsider.account.address
-    );
+    await freshSys.outsider.writeContract({
+      address: freshSys.token.address,
+      abi: [{
+        name: "approve",
+        type: "function" as const,
+        inputs: [
+          { name: "spender", type: "address" as const },
+          { name: "amount", type: "uint256" as const },
+        ],
+        outputs: [{ type: "bool" as const }],
+        stateMutability: "nonpayable" as const,
+      }],
+      functionName: "approve",
+      args: [freshSys.parties.address, parseEther("100")],
+    });
 
     await assert.rejects(
       async () => {
-        await partiesOutsider.write.joinContract([
+        await joinContractAs(
+          freshSys,
+          freshSys.outsider,
           instanceId,
           CHALLENGER_ROLE,
           parseEther("50"),
-          1,
-        ]);
+          1
+        );
       },
       (err: any) => true,
       "Joining after activation should revert (status != Created)"
@@ -310,24 +302,23 @@ describe("Edge Cases", () => {
 
     // Only A joins
     await sys.token.write.mint([sys.playerA.account.address, parseEther("100")]);
-    const tokenA = await getContractAsUser(
-      "MockIXToken",
-      sys.token.address,
-      sys.playerA.account.address
-    );
-    await tokenA.write.approve([sys.parties.address, parseEther("100")]);
+    await sys.playerA.writeContract({
+      address: sys.token.address,
+      abi: [{
+        name: "approve",
+        type: "function" as const,
+        inputs: [
+          { name: "spender", type: "address" as const },
+          { name: "amount", type: "uint256" as const },
+        ],
+        outputs: [{ type: "bool" as const }],
+        stateMutability: "nonpayable" as const,
+      }],
+      functionName: "approve",
+      args: [sys.parties.address, parseEther("100")],
+    });
 
-    const partiesA = await getContractAsUser(
-      "ContractParties",
-      sys.parties.address,
-      sys.playerA.account.address
-    );
-    await partiesA.write.joinContract([
-      instanceId,
-      CHALLENGER_ROLE,
-      parseEther("50"),
-      1,
-    ]);
+    await joinContractAs(sys, sys.playerA, instanceId, CHALLENGER_ROLE, parseEther("50"), 1);
 
     // Try to activate with only 1 party
     await assert.rejects(
@@ -356,20 +347,16 @@ describe("Edge Cases", () => {
     });
     const instanceId = receipt.logs[0].topics[1] as `0x${string}`;
 
-    const partiesA = await getContractAsUser(
-      "ContractParties",
-      sys.parties.address,
-      sys.playerA.account.address
-    );
-
     await assert.rejects(
       async () => {
-        await partiesA.write.joinContract([
+        await joinContractAs(
+          sys,
+          sys.playerA,
           instanceId,
           CHALLENGER_ROLE,
           0n, // zero escrow
-          1,
-        ]);
+          1
+        );
       },
       (err: any) => true,
       "Zero escrow should revert with InvalidAmount"
@@ -396,29 +383,13 @@ describe("Edge Cases", () => {
     });
     const instanceId = receipt.logs[0].topics[1] as `0x${string}`;
 
-    const partiesA = await getContractAsUser(
-      "ContractParties",
-      freshSys.parties.address,
-      freshSys.playerA.account.address
-    );
-
     // First join succeeds
-    await partiesA.write.joinContract([
-      instanceId,
-      CHALLENGER_ROLE,
-      parseEther("50"),
-      1,
-    ]);
+    await joinContractAs(freshSys, freshSys.playerA, instanceId, CHALLENGER_ROLE, parseEther("50"), 1);
 
     // Second join should fail
     await assert.rejects(
       async () => {
-        await partiesA.write.joinContract([
-          instanceId,
-          OPPONENT_ROLE,
-          parseEther("50"),
-          1,
-        ]);
+        await joinContractAs(freshSys, freshSys.playerA, instanceId, OPPONENT_ROLE, parseEther("50"), 1);
       },
       (err: any) => true,
       "Same user joining twice should revert with AlreadyJoined"

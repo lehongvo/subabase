@@ -77,6 +77,17 @@ export const OPPONENT_ROLE = keccak256(toHex("opponent"));
 const OZ_INITIALIZABLE_SLOT =
   "0xf0c57e16840df040f15088dc2f81fe391c3923bec73e23a9662efc9c229c6a00" as `0x${string}`;
 
+// OZ v5 ReentrancyGuard storage slot — constructor sets to NOT_ENTERED (1).
+// When using _disableInitializers() pattern, we must ensure this is set.
+// keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.ReentrancyGuard")) - 1)) & ~bytes32(uint256(0xff))
+const OZ_REENTRANCY_GUARD_SLOT =
+  "0x9b779b17422d0df92223018b32b4d1fa46e071723d6817e2486d003becc55f00" as `0x${string}`;
+const NOT_ENTERED =
+  "0x0000000000000000000000000000000000000000000000000000000000000001" as `0x${string}`;
+
+const ZERO_BYTES32 =
+  "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
+
 /**
  * Reset the OZ v5 Initializable storage slot to allow calling initialize()
  * on an implementation contract that has _disableInitializers() in its constructor.
@@ -88,7 +99,22 @@ async function resetInitialized(
   await testClient.setStorageAt({
     address: contractAddress,
     index: OZ_INITIALIZABLE_SLOT,
-    value: "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`,
+    value: ZERO_BYTES32,
+  });
+}
+
+/**
+ * Ensure the OZ v5 ReentrancyGuard storage slot is set to NOT_ENTERED.
+ * Required for contracts using ReentrancyGuard (non-upgradeable).
+ */
+async function ensureReentrancyGuard(
+  testClient: any,
+  contractAddress: Address
+) {
+  await testClient.setStorageAt({
+    address: contractAddress,
+    index: OZ_REENTRANCY_GUARD_SLOT,
+    value: NOT_ENTERED,
   });
 }
 
@@ -121,6 +147,7 @@ export async function deployFullSystem() {
   // ---- Deploy ContractParties ----
   const parties = await viem.deployContract("ContractParties");
   await resetInitialized(testClient, parties.address);
+  await ensureReentrancyGuard(testClient, parties.address);
   await parties.write.initialize([
     admin.account.address,
     instances.address,
@@ -148,6 +175,7 @@ export async function deployFullSystem() {
   // ---- Deploy ContractSettlements ----
   const settlements = await viem.deployContract("ContractSettlements");
   await resetInitialized(testClient, settlements.address);
+  await ensureReentrancyGuard(testClient, settlements.address);
   await settlements.write.initialize([
     admin.account.address,
     instances.address,
@@ -353,6 +381,26 @@ export function getWalletClient(sys: DeployedSystem, address: Address) {
   return client;
 }
 
+/**
+ * Call joinContract as a specific player using their wallet client directly.
+ * This avoids the getContractAt wallet binding issue in Hardhat 3.
+ */
+export async function joinContractAs(
+  sys: DeployedSystem,
+  wallet: any,
+  instanceId: `0x${string}`,
+  role: `0x${string}`,
+  escrowAmount: bigint,
+  escrowType: number
+) {
+  await wallet.writeContract({
+    address: sys.parties.address,
+    abi: sys.parties.abi,
+    functionName: "joinContract",
+    args: [instanceId, role, escrowAmount, escrowType],
+  });
+}
+
 // --------------------------------------------------------------------------
 // Helper: Run full RPS lifecycle up to settlement
 // --------------------------------------------------------------------------
@@ -376,30 +424,10 @@ export async function runFullRPSLifecycle(sys: DeployedSystem) {
   const instanceId = createReceipt.logs[0].topics[1] as `0x${string}`;
 
   // 4. Player A joins
-  const partiesA = await getContractAsUser(
-    "ContractParties",
-    sys.parties.address,
-    sys.playerA.account.address
-  );
-  await partiesA.write.joinContract([
-    instanceId,
-    CHALLENGER_ROLE,
-    betAmount,
-    1, // PointType.IXFreePoint
-  ]);
+  await joinContractAs(sys, sys.playerA, instanceId, CHALLENGER_ROLE, betAmount, 1);
 
   // 5. Player B joins
-  const partiesB = await getContractAsUser(
-    "ContractParties",
-    sys.parties.address,
-    sys.playerB.account.address
-  );
-  await partiesB.write.joinContract([
-    instanceId,
-    OPPONENT_ROLE,
-    betAmount,
-    1, // PointType.IXFreePoint
-  ]);
+  await joinContractAs(sys, sys.playerB, instanceId, OPPONENT_ROLE, betAmount, 1);
 
   // 6. Activate instance
   await sys.instances.write.activateInstance([instanceId]);

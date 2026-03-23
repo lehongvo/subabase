@@ -5,9 +5,26 @@ import {Test} from "forge-std/Test.sol";
 import {StateValidator} from "../libraries/StateValidator.sol";
 import {Types} from "../libraries/Types.sol";
 
+/// @title StateValidatorHarness -- Wrapper to call library functions externally
+/// @dev Required because vm.expectRevert() does not work with inlined library calls
+contract StateValidatorHarness {
+    function validateTransition(
+        bytes32 instanceId,
+        Types.ContractStatus from,
+        Types.ContractStatus to
+    ) external pure {
+        StateValidator.validateTransition(instanceId, from, to);
+    }
+}
+
 /// @title StateValidatorTest -- Tests for contract lifecycle state machine validation
 contract StateValidatorTest is Test {
     bytes32 constant DUMMY_ID = bytes32(uint256(1));
+    StateValidatorHarness internal harness;
+
+    function setUp() public {
+        harness = new StateValidatorHarness();
+    }
 
     // ========================================================================
     // Valid transitions (6 tests)
@@ -135,7 +152,7 @@ contract StateValidatorTest is Test {
                 Types.ContractStatus.Settled
             )
         );
-        StateValidator.validateTransition(
+        harness.validateTransition(
             DUMMY_ID,
             Types.ContractStatus.Created,
             Types.ContractStatus.Settled

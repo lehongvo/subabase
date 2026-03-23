@@ -61,6 +61,9 @@ contract TestSetup is Test {
     uint128 public constant ESCROW_AMOUNT = 50e18;
     uint16  public constant FEE_RATE_BPS  = 300; // 3%
 
+    /// @dev Counter for generating unique template names in _fullSetup
+    uint256 private _templateNameCounter;
+
     // ========================================================================
     // SETUP
     // ========================================================================
@@ -182,9 +185,16 @@ contract TestSetup is Test {
     /// @notice Create an RPS template with default settings
     /// @return templateId The created template ID
     function _createRPSTemplate() internal returns (bytes32 templateId) {
+        return _createRPSTemplateWithName("RPS Casual Lobby 1");
+    }
+
+    /// @notice Create an RPS template with a custom name
+    /// @param name The template name (must be unique)
+    /// @return templateId The created template ID
+    function _createRPSTemplateWithName(string memory name) internal returns (bytes32 templateId) {
         vm.prank(admin);
         templateId = templates.createTemplate(
-            "RPS Casual Lobby 1",
+            name,
             Types.ContractType.RPS,
             _encodeConditions(10e18, 100e18, 1, 15),
             _encodeRewardRules(true, 95),
@@ -234,7 +244,9 @@ contract TestSetup is Test {
     /// @return templateId The created template ID
     /// @return instanceId The created instance ID
     function _fullSetup() internal returns (bytes32 templateId, bytes32 instanceId) {
-        templateId = _createRPSTemplate();
+        _templateNameCounter++;
+        string memory name = string(abi.encodePacked("RPS Full Setup ", vm.toString(_templateNameCounter)));
+        templateId = _createRPSTemplateWithName(name);
         instanceId = _createInstance(templateId);
         _aliceJoins(instanceId);
         _bobJoins(instanceId);

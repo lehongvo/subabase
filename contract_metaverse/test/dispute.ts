@@ -12,7 +12,7 @@ import {
   createRPSTemplate,
   mintAndApprove,
   encodeResultData,
-  getContractAsUser,
+  joinContractAs,
   CHALLENGER_ROLE,
   OPPONENT_ROLE,
 } from "./helpers/deploy.js";
@@ -41,30 +41,10 @@ async function setupCompletedInstance(sys: DeployedSystem, timeoutSeconds = 15n)
   const instanceId = createReceipt.logs[0].topics[1] as `0x${string}`;
 
   // A joins
-  const partiesA = await getContractAsUser(
-    "ContractParties",
-    sys.parties.address,
-    sys.playerA.account.address
-  );
-  await partiesA.write.joinContract([
-    instanceId,
-    CHALLENGER_ROLE,
-    betAmount,
-    1,
-  ]);
+  await joinContractAs(sys, sys.playerA, instanceId, CHALLENGER_ROLE, betAmount, 1);
 
   // B joins
-  const partiesB = await getContractAsUser(
-    "ContractParties",
-    sys.parties.address,
-    sys.playerB.account.address
-  );
-  await partiesB.write.joinContract([
-    instanceId,
-    OPPONENT_ROLE,
-    betAmount,
-    1,
-  ]);
+  await joinContractAs(sys, sys.playerB, instanceId, OPPONENT_ROLE, betAmount, 1);
 
   // Activate
   await sys.instances.write.activateInstance([instanceId]);
@@ -140,7 +120,6 @@ describe("Dispute Flow", () => {
     });
 
     it("should allow B to consent after resolution", async () => {
-      // B consents on the resolved instance
       await sys.consents.write.submitConsent([
         instanceId,
         sys.playerB.account.address,

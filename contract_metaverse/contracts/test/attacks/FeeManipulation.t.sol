@@ -6,6 +6,18 @@ import {TestSetup} from "../helpers/TestSetup.sol";
 import {Types} from "../../libraries/Types.sol";
 import {FeeCalculator} from "../../libraries/FeeCalculator.sol";
 
+/// @title FeeCalculatorHarnessForAttack -- Wrapper to call library functions externally
+/// @dev Required because vm.expectRevert() does not work with inlined library calls
+contract FeeCalculatorHarnessForAttack {
+    function calculateFee(uint128 totalEscrow, uint16 feeRateBps)
+        external
+        pure
+        returns (uint128, uint128)
+    {
+        return FeeCalculator.calculateFee(totalEscrow, feeRateBps);
+    }
+}
+
 /// @title FeeManipulationTest -- Tests fee calculation safety bounds and invariants
 /// @notice Verifies that fee rates are capped, fee + winner == totalEscrow always holds,
 ///         and direct escrow release without proper settlement is blocked.
@@ -13,9 +25,11 @@ contract FeeManipulationTest is TestSetup {
 
     bytes32 public templateId;
     bytes32 public instanceId;
+    FeeCalculatorHarnessForAttack internal feeHarness;
 
     function setUp() public override {
         super.setUp();
+        feeHarness = new FeeCalculatorHarnessForAttack();
     }
 
     // ========================================================================
@@ -154,13 +168,13 @@ contract FeeManipulationTest is TestSetup {
     /// @notice FeeCalculator rejects totalEscrow = 0
     function test_feeCalculator_zeroEscrow_reverts() public {
         vm.expectRevert(Types.InvalidAmount.selector);
-        FeeCalculator.calculateFee(0, 300);
+        feeHarness.calculateFee(0, 300);
     }
 
     /// @notice FeeCalculator rejects feeRate > 5000
     function test_feeCalculator_aboveMaxRate_reverts() public {
         vm.expectRevert(abi.encodeWithSelector(Types.InvalidFeeRate.selector, uint16(5001)));
-        FeeCalculator.calculateFee(100e18, 5001);
+        feeHarness.calculateFee(100e18, 5001);
     }
 
     // ========================================================================

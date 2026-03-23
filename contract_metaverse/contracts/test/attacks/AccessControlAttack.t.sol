@@ -371,9 +371,10 @@ contract AccessControlAttackTest is TestSetup {
 
     /// @notice Stranger cannot grant themselves DEFAULT_ADMIN_ROLE
     function test_roleEscalation_grantDefaultAdmin_reverts() public {
+        bytes32 defaultAdminRole = instances.DEFAULT_ADMIN_ROLE();
         vm.prank(stranger);
         vm.expectRevert();
-        instances.grantRole(instances.DEFAULT_ADMIN_ROLE(), stranger);
+        instances.grantRole(defaultAdminRole, stranger);
     }
 
     /// @notice Stranger cannot grant themselves SYSTEM_ROLE
