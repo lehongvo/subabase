@@ -203,9 +203,9 @@ async function main() {
     const impl = await viem.deployContract(contractName);
     console.log(`    Implementation: ${impl.address}`);
 
-    console.log(`  Deploying TransparentUpgradeableProxy for ${contractName}...`);
+    console.log(`  Deploying IXProxy (TransparentUpgradeableProxy) for ${contractName}...`);
     const proxy = await viem.deployContract(
-      "TransparentUpgradeableProxy" as any,
+      "IXProxy" as any,
       [impl.address, deployer, initData] as any
     );
     console.log(`    Proxy: ${proxy.address}`);
