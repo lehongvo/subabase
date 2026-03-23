@@ -70,11 +70,35 @@ export const CHALLENGER_ROLE = keccak256(toHex("challenger"));
 export const OPPONENT_ROLE = keccak256(toHex("opponent"));
 
 // --------------------------------------------------------------------------
+// OZ v5 Initializable storage slot — must be reset before calling initialize()
+// on implementation contracts (constructor calls _disableInitializers()).
+// Slot = keccak256("openzeppelin.storage.Initializable") - 1
+// --------------------------------------------------------------------------
+const OZ_INITIALIZABLE_SLOT =
+  "0xf0c57e16840df040f15088dc2f81fe391c3923bec73e23a9662efc9c229c6a00" as `0x${string}`;
+
+/**
+ * Reset the OZ v5 Initializable storage slot to allow calling initialize()
+ * on an implementation contract that has _disableInitializers() in its constructor.
+ */
+async function resetInitialized(
+  testClient: any,
+  contractAddress: Address
+) {
+  await testClient.setStorageAt({
+    address: contractAddress,
+    index: OZ_INITIALIZABLE_SLOT,
+    value: "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`,
+  });
+}
+
+// --------------------------------------------------------------------------
 // Main deploy function
 // --------------------------------------------------------------------------
 export async function deployFullSystem() {
   const { viem } = await network.connect();
   const publicClient = await viem.getPublicClient();
+  const testClient = await viem.getTestClient();
   const [admin, systemAccount, playerA, playerB, treasury, outsider] =
     await viem.getWalletClients();
 
@@ -83,10 +107,12 @@ export async function deployFullSystem() {
 
   // ---- Deploy ContractTemplates ----
   const templates = await viem.deployContract("ContractTemplates");
+  await resetInitialized(testClient, templates.address);
   await templates.write.initialize([admin.account.address]);
 
   // ---- Deploy ContractInstances ----
   const instances = await viem.deployContract("ContractInstances");
+  await resetInitialized(testClient, instances.address);
   await instances.write.initialize([
     admin.account.address,
     templates.address,
@@ -94,6 +120,7 @@ export async function deployFullSystem() {
 
   // ---- Deploy ContractParties ----
   const parties = await viem.deployContract("ContractParties");
+  await resetInitialized(testClient, parties.address);
   await parties.write.initialize([
     admin.account.address,
     instances.address,
@@ -102,6 +129,7 @@ export async function deployFullSystem() {
 
   // ---- Deploy ContractResults ----
   const results = await viem.deployContract("ContractResults");
+  await resetInitialized(testClient, results.address);
   await results.write.initialize([
     admin.account.address,
     instances.address,
@@ -109,6 +137,7 @@ export async function deployFullSystem() {
 
   // ---- Deploy ContractConsents ----
   const consents = await viem.deployContract("ContractConsents");
+  await resetInitialized(testClient, consents.address);
   await consents.write.initialize([
     admin.account.address,
     instances.address,
@@ -118,6 +147,7 @@ export async function deployFullSystem() {
 
   // ---- Deploy ContractSettlements ----
   const settlements = await viem.deployContract("ContractSettlements");
+  await resetInitialized(testClient, settlements.address);
   await settlements.write.initialize([
     admin.account.address,
     instances.address,
@@ -251,33 +281,42 @@ export async function mintAndApprove(
   await sys.token.write.mint([sys.playerB.account.address, amount]);
 
   // Approve parties contract to spend on behalf of playerA
-  const tokenA = await getTokenAsUser(sys, sys.playerA.account.address);
-  await tokenA.write.approve([sys.parties.address, amount]);
+  await sys.playerA.writeContract({
+    address: sys.token.address,
+    abi: ERC20_APPROVE_ABI,
+    functionName: "approve",
+    args: [sys.parties.address, amount],
+  });
 
   // Approve parties contract to spend on behalf of playerB
-  const tokenB = await getTokenAsUser(sys, sys.playerB.account.address);
-  await tokenB.write.approve([sys.parties.address, amount]);
-}
-
-async function getTokenAsUser(sys: DeployedSystem, userAddress: Address) {
-  const { viem } = await network.connect();
-  return viem.getContractAt("MockIXToken", sys.token.address, {
-    client: { wallet: (await getWalletClientByAddress(userAddress)) },
+  await sys.playerB.writeContract({
+    address: sys.token.address,
+    abi: ERC20_APPROVE_ABI,
+    functionName: "approve",
+    args: [sys.parties.address, amount],
   });
 }
 
-async function getWalletClientByAddress(address: Address) {
-  const { viem } = await network.connect();
-  const clients = await viem.getWalletClients();
-  const client = clients.find(
-    (c) => getAddress(c.account.address) === getAddress(address)
-  );
-  if (!client) throw new Error(`No wallet client for ${address}`);
-  return client;
-}
+// --------------------------------------------------------------------------
+// ERC20 approve ABI fragment for direct wallet calls
+// --------------------------------------------------------------------------
+const ERC20_APPROVE_ABI = [
+  {
+    name: "approve",
+    type: "function",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
 
 // --------------------------------------------------------------------------
 // Helper: get contract instance as a specific user
+// Uses impersonation via test client to ensure transactions from the
+// correct sender are properly mined in Hardhat 3.
 // --------------------------------------------------------------------------
 export async function getContractAsUser<T extends string>(
   contractName: T,
@@ -293,6 +332,25 @@ export async function getContractAsUser<T extends string>(
   return viem.getContractAt(contractName, contractAddress, {
     client: { wallet },
   });
+}
+
+/**
+ * Get a wallet client for a given address from the deployed system.
+ */
+export function getWalletClient(sys: DeployedSystem, address: Address) {
+  const all = [
+    sys.admin,
+    sys.systemAccount,
+    sys.playerA,
+    sys.playerB,
+    sys.treasury,
+    sys.outsider,
+  ];
+  const client = all.find(
+    (c) => getAddress(c.account.address) === getAddress(address)
+  );
+  if (!client) throw new Error(`No wallet client for ${address}`);
+  return client;
 }
 
 // --------------------------------------------------------------------------

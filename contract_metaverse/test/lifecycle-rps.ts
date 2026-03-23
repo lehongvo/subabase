@@ -62,12 +62,14 @@ describe("Lifecycle: Full RPS Walkthrough", () => {
       sys.parties.address,
       sys.playerA.account.address
     );
-    await partiesA.write.joinContract([
+    const joinHash = await partiesA.write.joinContract([
       instanceId,
       CHALLENGER_ROLE,
       betAmount,
       1, // IXFreePoint
     ]);
+    const joinReceipt = await sys.publicClient.waitForTransactionReceipt({ hash: joinHash });
+    assert.equal(joinReceipt.status, "success", "Player A join tx should succeed");
 
     const hasJoined = await sys.parties.read.hasJoined([
       instanceId,
@@ -88,12 +90,14 @@ describe("Lifecycle: Full RPS Walkthrough", () => {
       sys.parties.address,
       sys.playerB.account.address
     );
-    await partiesB.write.joinContract([
+    const joinHash = await partiesB.write.joinContract([
       instanceId,
       OPPONENT_ROLE,
       betAmount,
       1, // IXFreePoint
     ]);
+    const joinReceipt = await sys.publicClient.waitForTransactionReceipt({ hash: joinHash });
+    assert.equal(joinReceipt.status, "success", "Player B join tx should succeed");
 
     const hasJoined = await sys.parties.read.hasJoined([
       instanceId,
