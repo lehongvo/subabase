@@ -247,6 +247,32 @@ Khi mẫu được đặt `optional`, người dùng có thể chọn lúc tham 
 | consented_at | TIMESTAMP | Thời điểm đồng thuận |
 | signature | VARCHAR | Giai đoạn 1+: Chữ ký ví |
 
+#### Mục đích từng bảng (ví dụ RPS)
+
+| Bảng | Mục đích | Ví dụ RPS |
+| --- | --- | --- |
+| `contract_templates` | Khuôn mẫu / luật chơi do admin tạo | "RPS Casual: cược 10–100, phí 3%" |
+| `contract_instances` | Trận cụ thể được tạo từ template | "Trận A vs B lúc 3pm" |
+| `contract_parties` | Ai tham gia trận đó, vai trò gì, ký quỹ bao nhiêu | "A = challenger, nạp 50 điểm" |
+| `contract_results` | Kết quả trận | "B thắng, rock vs scissors, 1–0" |
+| `contract_consents` | Hai bên xác nhận đồng ý hay phản đối kết quả | "A đồng ý thua / A phản đối → dispute" |
+| `contract_settlements` | Ghi chép chuyển điểm khi thanh toán | "B nhận 97, Treasury nhận 3 phí" |
+| `point_balances` | Ví điểm của mỗi user | "A có 50 ix_free_point" |
+| `public_ledger` | View công khai tổng hợp tất cả thông tin trên | Ai cũng xem được, không cần đăng nhập |
+
+**Luồng dữ liệu theo thứ tự:**
+
+```
+templates → instances → parties → results → consents → settlements
+  (luật)     (trận)     (ai chơi)  (kết quả)  (đồng ý)    (trả tiền)
+                                                    ↓
+                                              point_balances
+                                              (cập nhật ví)
+                                                    ↓
+                                              public_ledger
+                                              (công khai)
+```
+
 ### 3.3 Yêu cầu phi chức năng
 
 | Mục | Yêu cầu |
