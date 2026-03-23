@@ -5,7 +5,6 @@
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import { parseEther } from "viem";
-import { network } from "hardhat";
 import {
   deployFullSystem,
   type DeployedSystem,

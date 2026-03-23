@@ -1,31 +1,150 @@
 /**
  * IX Metaverse Contract System - MegaETH Testnet Deployment Script
  *
- * Deploys all 6 core contracts + MockIXToken, initializes them,
- * wires cross-contract references, and grants inter-contract roles.
+ * Deploys all 6 core contracts behind TransparentUpgradeableProxy + MockIXToken,
+ * initializes them, wires cross-contract references, and grants inter-contract roles.
  *
  * Usage:
  *   npx hardhat run scripts/deploy-megaeth.ts
  *
- * Environment variables (from .env):
+ * Environment variables (from .env via dotenv):
  *   PRIVATE_KEY           - Deployer private key
  *   MEGAETH_TEST_NET_RPC  - MegaETH testnet RPC URL
  */
 
 import { network } from "hardhat";
-import { keccak256, toHex, type Address, type Hash } from "viem";
+import {
+  keccak256,
+  toHex,
+  encodeFunctionData,
+  type Address,
+  type Hash,
+  type Abi,
+} from "viem";
 
 // Treasury address (system UUID convention)
 const TREASURY_ADDRESS: Address = "0x0000000000000000000000000000000000000001";
 
-// Role hashes (matching Solidity: keccak256("CONTRACT_ROLE"), etc.)
+// Role hashes (matching Solidity: keccak256("..."))
 const CONTRACT_ROLE: Hash = keccak256(toHex("CONTRACT_ROLE"));
 const SYSTEM_ROLE: Hash = keccak256(toHex("SYSTEM_ROLE"));
-const SERVER_ROLE: Hash = keccak256(toHex("SERVER_ROLE"));
-const SETTLER_ROLE: Hash = keccak256(toHex("SETTLER_ROLE"));
 const OPERATOR_ROLE: Hash = keccak256(toHex("OPERATOR_ROLE"));
 
+// ABI fragments for initialize functions
+const initTemplatesAbi = [
+  {
+    name: "initialize",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "admin", type: "address" }],
+    outputs: [],
+  },
+] as const;
+
+const initInstancesAbi = [
+  {
+    name: "initialize",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "admin", type: "address" },
+      { name: "templatesAddress", type: "address" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+const initPartiesAbi = [
+  {
+    name: "initialize",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "admin", type: "address" },
+      { name: "instancesAddress", type: "address" },
+      { name: "tokenAddress", type: "address" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+const initResultsAbi = [
+  {
+    name: "initialize",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "defaultAdmin", type: "address" },
+      { name: "instancesContract", type: "address" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+const initConsentsAbi = [
+  {
+    name: "initialize",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "defaultAdmin", type: "address" },
+      { name: "instancesContract", type: "address" },
+      { name: "partiesContract", type: "address" },
+      { name: "templatesContract", type: "address" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+const initSettlementsAbi = [
+  {
+    name: "initialize",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "defaultAdmin", type: "address" },
+      { name: "instancesContract", type: "address" },
+      { name: "partiesContract", type: "address" },
+      { name: "resultsContract", type: "address" },
+      { name: "consentsContract", type: "address" },
+      { name: "treasury", type: "address" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+const setterAbi = (fnName: string): Abi => [
+  {
+    name: fnName,
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "addr", type: "address" }],
+    outputs: [],
+  },
+];
+
+const grantRoleAbi: Abi = [
+  {
+    name: "grantRole",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "role", type: "bytes32" },
+      { name: "account", type: "address" },
+    ],
+    outputs: [],
+  },
+];
+
 interface DeployedContracts {
+  tokenImpl: Address;
+  templatesImpl: Address;
+  instancesImpl: Address;
+  partiesImpl: Address;
+  resultsImpl: Address;
+  consentsImpl: Address;
+  settlementsImpl: Address;
+  // Proxy addresses (use these for interactions)
   token: Address;
   templates: Address;
   instances: Address;
@@ -36,9 +155,10 @@ interface DeployedContracts {
 }
 
 async function main() {
-  console.log("=== IX Metaverse Contract System - MegaETH Testnet Deployment ===\n");
+  console.log(
+    "=== IX Metaverse Contract System - MegaETH Testnet Deployment ===\n"
+  );
 
-  // Connect to MegaETH testnet
   const { viem } = await network.connect({
     network: "megaethTestnet",
     chainType: "l1",
@@ -50,9 +170,7 @@ async function main() {
   const deployer = deployerClient.account.address;
   console.log("Deployer address:", deployer);
 
-  // Check deployer balance
   const balance = await publicClient.getBalance({ address: deployer });
-  console.log("Deployer balance:", balance.toString(), "wei");
   console.log(
     "Deployer balance:",
     (Number(balance) / 1e18).toFixed(6),
@@ -61,10 +179,7 @@ async function main() {
 
   if (balance === 0n) {
     console.error("ERROR: Deployer account has zero balance.");
-    console.error("Fund the account before deploying:");
-    console.error(`  Address: ${deployer}`);
-    console.error("  Network: MegaETH Testnet (Carrot)");
-    console.error("  Faucet:  https://megaeth.com/faucet (if available)");
+    console.error(`Fund address ${deployer} on MegaETH Testnet (Carrot).`);
     process.exit(1);
   }
 
@@ -72,184 +187,124 @@ async function main() {
   console.log("Chain ID:", chainId);
   console.log("RPC URL: https://carrot.megaeth.com/rpc\n");
 
-  const deployed: DeployedContracts = {} as DeployedContracts;
+  const deployed: DeployedContracts = {} as any;
   const txHashes: Record<string, Hash> = {};
-  const gasCosts: Record<string, bigint> = {};
 
-  // Helper: deploy a contract and return its address
-  async function deploy(
-    name: string,
-    args: readonly unknown[] = []
-  ): Promise<Address> {
-    console.log(`Deploying ${name}...`);
-    const contract = await viem.deployContract(name, args);
-    console.log(`  ${name} deployed at: ${contract.address}`);
-    return contract.address;
+  // =========================================================================
+  // Helper: deploy implementation + TransparentUpgradeableProxy
+  // The proxy constructor calls initialize() atomically via _data param.
+  // =========================================================================
+
+  async function deployWithProxy(
+    contractName: string,
+    initData: `0x${string}`
+  ): Promise<{ impl: Address; proxy: Address }> {
+    console.log(`  Deploying ${contractName} implementation...`);
+    const impl = await viem.deployContract(contractName);
+    console.log(`    Implementation: ${impl.address}`);
+
+    console.log(`  Deploying TransparentUpgradeableProxy for ${contractName}...`);
+    const proxy = await viem.deployContract(
+      "TransparentUpgradeableProxy" as any,
+      [impl.address, deployer, initData] as any
+    );
+    console.log(`    Proxy: ${proxy.address}`);
+
+    return { impl: impl.address, proxy: proxy.address };
   }
 
   // =========================================================================
-  // Step 1: Deploy all contracts
+  // Step 1: Deploy MockIXToken (not upgradeable)
   // =========================================================================
 
-  console.log("--- Step 1: Deploy Contracts ---\n");
-
-  deployed.token = await deploy("MockIXToken");
-  deployed.templates = await deploy("ContractTemplates");
-  deployed.instances = await deploy("ContractInstances");
-  deployed.parties = await deploy("ContractParties");
-  deployed.results = await deploy("ContractResults");
-  deployed.consents = await deploy("ContractConsents");
-  deployed.settlements = await deploy("ContractSettlements");
-
-  console.log("\nAll contracts deployed.\n");
+  console.log("--- Step 1: Deploy MockIXToken ---\n");
+  const tokenContract = await viem.deployContract("MockIXToken");
+  deployed.token = tokenContract.address;
+  deployed.tokenImpl = tokenContract.address;
+  console.log(`  MockIXToken: ${deployed.token}\n`);
 
   // =========================================================================
-  // Step 2: Initialize all contracts
-  // NOTE: Contracts have _disableInitializers() in constructor, so initialize()
-  // will revert on direct (non-proxy) deployments. For production, deploy
-  // behind TransparentUpgradeableProxy. For testnet, we attempt direct init
-  // and catch errors.
+  // Step 2: Deploy core contracts with proxies + initialization
   // =========================================================================
 
-  console.log("--- Step 2: Initialize Contracts ---\n");
+  console.log("--- Step 2: Deploy Core Contracts with Proxies ---\n");
 
-  try {
-    // Templates: initialize(admin)
-    console.log("Initializing ContractTemplates...");
-    let hash = await deployerClient.writeContract({
-      address: deployed.templates,
-      abi: [
-        {
-          name: "initialize",
-          type: "function",
-          stateMutability: "nonpayable",
-          inputs: [{ name: "admin", type: "address" }],
-          outputs: [],
-        },
-      ],
+  // 2a. ContractTemplates
+  console.log("[1/6] ContractTemplates");
+  const tmpl = await deployWithProxy(
+    "ContractTemplates",
+    encodeFunctionData({
+      abi: initTemplatesAbi,
       functionName: "initialize",
       args: [deployer],
-    });
-    await publicClient.waitForTransactionReceipt({ hash });
-    txHashes["initTemplates"] = hash;
-    console.log("  Templates initialized. Tx:", hash);
+    })
+  );
+  deployed.templatesImpl = tmpl.impl;
+  deployed.templates = tmpl.proxy;
+  console.log();
 
-    // Instances: initialize(admin, templatesAddress)
-    console.log("Initializing ContractInstances...");
-    hash = await deployerClient.writeContract({
-      address: deployed.instances,
-      abi: [
-        {
-          name: "initialize",
-          type: "function",
-          stateMutability: "nonpayable",
-          inputs: [
-            { name: "admin", type: "address" },
-            { name: "templatesAddress", type: "address" },
-          ],
-          outputs: [],
-        },
-      ],
+  // 2b. ContractInstances
+  console.log("[2/6] ContractInstances");
+  const inst = await deployWithProxy(
+    "ContractInstances",
+    encodeFunctionData({
+      abi: initInstancesAbi,
       functionName: "initialize",
       args: [deployer, deployed.templates],
-    });
-    await publicClient.waitForTransactionReceipt({ hash });
-    txHashes["initInstances"] = hash;
-    console.log("  Instances initialized. Tx:", hash);
+    })
+  );
+  deployed.instancesImpl = inst.impl;
+  deployed.instances = inst.proxy;
+  console.log();
 
-    // Parties: initialize(admin, instancesAddress, tokenAddress)
-    console.log("Initializing ContractParties...");
-    hash = await deployerClient.writeContract({
-      address: deployed.parties,
-      abi: [
-        {
-          name: "initialize",
-          type: "function",
-          stateMutability: "nonpayable",
-          inputs: [
-            { name: "admin", type: "address" },
-            { name: "instancesAddress", type: "address" },
-            { name: "tokenAddress", type: "address" },
-          ],
-          outputs: [],
-        },
-      ],
+  // 2c. ContractParties
+  console.log("[3/6] ContractParties");
+  const part = await deployWithProxy(
+    "ContractParties",
+    encodeFunctionData({
+      abi: initPartiesAbi,
       functionName: "initialize",
       args: [deployer, deployed.instances, deployed.token],
-    });
-    await publicClient.waitForTransactionReceipt({ hash });
-    txHashes["initParties"] = hash;
-    console.log("  Parties initialized. Tx:", hash);
+    })
+  );
+  deployed.partiesImpl = part.impl;
+  deployed.parties = part.proxy;
+  console.log();
 
-    // Results: initialize(defaultAdmin, instancesContract)
-    console.log("Initializing ContractResults...");
-    hash = await deployerClient.writeContract({
-      address: deployed.results,
-      abi: [
-        {
-          name: "initialize",
-          type: "function",
-          stateMutability: "nonpayable",
-          inputs: [
-            { name: "defaultAdmin", type: "address" },
-            { name: "instancesContract", type: "address" },
-          ],
-          outputs: [],
-        },
-      ],
+  // 2d. ContractResults
+  console.log("[4/6] ContractResults");
+  const res = await deployWithProxy(
+    "ContractResults",
+    encodeFunctionData({
+      abi: initResultsAbi,
       functionName: "initialize",
       args: [deployer, deployed.instances],
-    });
-    await publicClient.waitForTransactionReceipt({ hash });
-    txHashes["initResults"] = hash;
-    console.log("  Results initialized. Tx:", hash);
+    })
+  );
+  deployed.resultsImpl = res.impl;
+  deployed.results = res.proxy;
+  console.log();
 
-    // Consents: initialize(defaultAdmin, instancesContract, partiesContract, templatesContract)
-    console.log("Initializing ContractConsents...");
-    hash = await deployerClient.writeContract({
-      address: deployed.consents,
-      abi: [
-        {
-          name: "initialize",
-          type: "function",
-          stateMutability: "nonpayable",
-          inputs: [
-            { name: "defaultAdmin", type: "address" },
-            { name: "instancesContract", type: "address" },
-            { name: "partiesContract", type: "address" },
-            { name: "templatesContract", type: "address" },
-          ],
-          outputs: [],
-        },
-      ],
+  // 2e. ContractConsents
+  console.log("[5/6] ContractConsents");
+  const cons = await deployWithProxy(
+    "ContractConsents",
+    encodeFunctionData({
+      abi: initConsentsAbi,
       functionName: "initialize",
       args: [deployer, deployed.instances, deployed.parties, deployed.templates],
-    });
-    await publicClient.waitForTransactionReceipt({ hash });
-    txHashes["initConsents"] = hash;
-    console.log("  Consents initialized. Tx:", hash);
+    })
+  );
+  deployed.consentsImpl = cons.impl;
+  deployed.consents = cons.proxy;
+  console.log();
 
-    // Settlements: initialize(defaultAdmin, instancesContract, partiesContract,
-    //                          resultsContract, consentsContract, treasury)
-    console.log("Initializing ContractSettlements...");
-    hash = await deployerClient.writeContract({
-      address: deployed.settlements,
-      abi: [
-        {
-          name: "initialize",
-          type: "function",
-          stateMutability: "nonpayable",
-          inputs: [
-            { name: "defaultAdmin", type: "address" },
-            { name: "instancesContract", type: "address" },
-            { name: "partiesContract", type: "address" },
-            { name: "resultsContract", type: "address" },
-            { name: "consentsContract", type: "address" },
-            { name: "treasury", type: "address" },
-          ],
-          outputs: [],
-        },
-      ],
+  // 2f. ContractSettlements
+  console.log("[6/6] ContractSettlements");
+  const sett = await deployWithProxy(
+    "ContractSettlements",
+    encodeFunctionData({
+      abi: initSettlementsAbi,
       functionName: "initialize",
       args: [
         deployer,
@@ -259,26 +314,13 @@ async function main() {
         deployed.consents,
         TREASURY_ADDRESS,
       ],
-    });
-    await publicClient.waitForTransactionReceipt({ hash });
-    txHashes["initSettlements"] = hash;
-    console.log("  Settlements initialized. Tx:", hash);
-  } catch (error: any) {
-    console.error("\nInitialization failed:", error.message);
-    console.error(
-      "\nNOTE: If you see 'InvalidInitialization', the contracts use _disableInitializers()"
-    );
-    console.error(
-      "in their constructors. For production, deploy behind TransparentUpgradeableProxy."
-    );
-    console.error(
-      "The contracts have been deployed but are NOT initialized.\n"
-    );
-    printDeploymentSummary(deployed, txHashes);
-    process.exit(1);
-  }
+    })
+  );
+  deployed.settlementsImpl = sett.impl;
+  deployed.settlements = sett.proxy;
+  console.log();
 
-  console.log("\nAll contracts initialized.\n");
+  console.log("All contracts deployed and initialized via proxies.\n");
 
   // =========================================================================
   // Step 3: Wire cross-contract references
@@ -286,58 +328,29 @@ async function main() {
 
   console.log("--- Step 3: Wire Cross-Contract References ---\n");
 
-  const setterAbi = (fnName: string) => [
-    {
-      name: fnName,
-      type: "function" as const,
-      stateMutability: "nonpayable" as const,
-      inputs: [{ name: "addr", type: "address" as const }],
-      outputs: [],
-    },
-  ];
-
-  // Instances -> Parties, Results, Consents, Settlements
-  console.log("Setting Instances cross-references...");
-  for (const [fnName, addr, label] of [
-    ["setPartiesContract", deployed.parties, "Parties"],
-    ["setResultsContract", deployed.results, "Results"],
-    ["setConsentsContract", deployed.consents, "Consents"],
-    ["setSettlementsContract", deployed.settlements, "Settlements"],
-  ] as const) {
+  async function callSetter(
+    target: Address,
+    fnName: string,
+    value: Address,
+    label: string
+  ) {
     const hash = await deployerClient.writeContract({
-      address: deployed.instances,
+      address: target,
       abi: setterAbi(fnName),
       functionName: fnName,
-      args: [addr],
+      args: [value],
     });
     await publicClient.waitForTransactionReceipt({ hash });
-    txHashes[`instances.${fnName}`] = hash;
-    console.log(`  Instances -> ${label}: ${hash}`);
+    txHashes[label] = hash;
+    console.log(`  ${label}: ${hash}`);
   }
 
-  // Parties -> Templates
-  console.log("Setting Parties cross-references...");
-  let hash = await deployerClient.writeContract({
-    address: deployed.parties,
-    abi: setterAbi("setTemplatesContract"),
-    functionName: "setTemplatesContract",
-    args: [deployed.templates],
-  });
-  await publicClient.waitForTransactionReceipt({ hash });
-  txHashes["parties.setTemplatesContract"] = hash;
-  console.log(`  Parties -> Templates: ${hash}`);
-
-  // Settlements -> Templates
-  console.log("Setting Settlements cross-references...");
-  hash = await deployerClient.writeContract({
-    address: deployed.settlements,
-    abi: setterAbi("setTemplatesContract"),
-    functionName: "setTemplatesContract",
-    args: [deployed.templates],
-  });
-  await publicClient.waitForTransactionReceipt({ hash });
-  txHashes["settlements.setTemplatesContract"] = hash;
-  console.log(`  Settlements -> Templates: ${hash}`);
+  await callSetter(deployed.instances, "setPartiesContract", deployed.parties, "instances.setPartiesContract");
+  await callSetter(deployed.instances, "setResultsContract", deployed.results, "instances.setResultsContract");
+  await callSetter(deployed.instances, "setConsentsContract", deployed.consents, "instances.setConsentsContract");
+  await callSetter(deployed.instances, "setSettlementsContract", deployed.settlements, "instances.setSettlementsContract");
+  await callSetter(deployed.parties, "setTemplatesContract", deployed.templates, "parties.setTemplatesContract");
+  await callSetter(deployed.settlements, "setTemplatesContract", deployed.templates, "settlements.setTemplatesContract");
 
   console.log("\nCross-contract references wired.\n");
 
@@ -347,74 +360,34 @@ async function main() {
 
   console.log("--- Step 4: Grant Roles ---\n");
 
-  const grantRoleAbi = [
-    {
-      name: "grantRole",
-      type: "function" as const,
-      stateMutability: "nonpayable" as const,
-      inputs: [
-        { name: "role", type: "bytes32" as const },
-        { name: "account", type: "address" as const },
-      ],
-      outputs: [],
-    },
-  ];
-
-  // CONTRACT_ROLE grants on Instances
-  const instanceRoleGrants: [Hash, Address, string][] = [
-    [CONTRACT_ROLE, deployed.results, "Results (completeInstance)"],
-    [CONTRACT_ROLE, deployed.consents, "Consents (disputeInstance)"],
-    [CONTRACT_ROLE, deployed.settlements, "Settlements (settleInstance)"],
-  ];
-
-  console.log("Granting CONTRACT_ROLE on Instances...");
-  for (const [role, addr, label] of instanceRoleGrants) {
-    hash = await deployerClient.writeContract({
-      address: deployed.instances,
+  async function grantRole(
+    target: Address,
+    role: Hash,
+    account: Address,
+    label: string
+  ) {
+    const hash = await deployerClient.writeContract({
+      address: target,
       abi: grantRoleAbi,
       functionName: "grantRole",
-      args: [role, addr],
+      args: [role, account],
     });
     await publicClient.waitForTransactionReceipt({ hash });
-    txHashes[`instances.grantRole.${label}`] = hash;
-    console.log(`  CONTRACT_ROLE -> ${label}: ${hash}`);
+    txHashes[label] = hash;
+    console.log(`  ${label}: ${hash}`);
   }
 
-  // CONTRACT_ROLE grants on Parties
-  console.log("Granting CONTRACT_ROLE on Parties...");
-  hash = await deployerClient.writeContract({
-    address: deployed.parties,
-    abi: grantRoleAbi,
-    functionName: "grantRole",
-    args: [CONTRACT_ROLE, deployed.settlements],
-  });
-  await publicClient.waitForTransactionReceipt({ hash });
-  txHashes["parties.grantRole.Settlements"] = hash;
-  console.log(`  CONTRACT_ROLE -> Settlements (releaseEscrow, refundEscrow): ${hash}`);
+  // CONTRACT_ROLE on Instances
+  await grantRole(deployed.instances, CONTRACT_ROLE, deployed.results, "instances.CONTRACT_ROLE -> Results");
+  await grantRole(deployed.instances, CONTRACT_ROLE, deployed.consents, "instances.CONTRACT_ROLE -> Consents");
+  await grantRole(deployed.instances, CONTRACT_ROLE, deployed.settlements, "instances.CONTRACT_ROLE -> Settlements");
 
-  // Grant SYSTEM_ROLE to deployer on Instances (for createInstance, activateInstance)
-  console.log("Granting SYSTEM_ROLE on Instances to deployer...");
-  hash = await deployerClient.writeContract({
-    address: deployed.instances,
-    abi: grantRoleAbi,
-    functionName: "grantRole",
-    args: [SYSTEM_ROLE, deployer],
-  });
-  await publicClient.waitForTransactionReceipt({ hash });
-  txHashes["instances.grantRole.SYSTEM_ROLE.deployer"] = hash;
-  console.log(`  SYSTEM_ROLE -> deployer: ${hash}`);
+  // CONTRACT_ROLE on Parties
+  await grantRole(deployed.parties, CONTRACT_ROLE, deployed.settlements, "parties.CONTRACT_ROLE -> Settlements");
 
-  // Grant OPERATOR_ROLE to deployer on Instances (for resolveInstance)
-  console.log("Granting OPERATOR_ROLE on Instances to deployer...");
-  hash = await deployerClient.writeContract({
-    address: deployed.instances,
-    abi: grantRoleAbi,
-    functionName: "grantRole",
-    args: [OPERATOR_ROLE, deployer],
-  });
-  await publicClient.waitForTransactionReceipt({ hash });
-  txHashes["instances.grantRole.OPERATOR_ROLE.deployer"] = hash;
-  console.log(`  OPERATOR_ROLE -> deployer: ${hash}`);
+  // SYSTEM_ROLE and OPERATOR_ROLE on Instances for deployer
+  await grantRole(deployed.instances, SYSTEM_ROLE, deployer, "instances.SYSTEM_ROLE -> deployer");
+  await grantRole(deployed.instances, OPERATOR_ROLE, deployer, "instances.OPERATOR_ROLE -> deployer");
 
   console.log("\nAll roles granted.\n");
 
@@ -422,18 +395,17 @@ async function main() {
   // Summary
   // =========================================================================
 
-  printDeploymentSummary(deployed, txHashes);
-}
+  const remainingBalance = await publicClient.getBalance({ address: deployer });
+  const gasUsed = balance - remainingBalance;
 
-function printDeploymentSummary(
-  deployed: DeployedContracts,
-  txHashes: Record<string, Hash>
-) {
   console.log("=== DEPLOYMENT SUMMARY ===\n");
-  console.log("Network:  MegaETH Testnet (Carrot)");
-  console.log("RPC URL:  https://carrot.megaeth.com/rpc\n");
+  console.log("Network:    MegaETH Testnet (Carrot)");
+  console.log("Chain ID:  ", chainId);
+  console.log("RPC URL:    https://carrot.megaeth.com/rpc");
+  console.log("Deployer:  ", deployer);
+  console.log("Treasury:  ", TREASURY_ADDRESS);
 
-  console.log("Contract Addresses:");
+  console.log("\nProxy Addresses (use these for interactions):");
   console.log(`  MockIXToken:          ${deployed.token}`);
   console.log(`  ContractTemplates:    ${deployed.templates}`);
   console.log(`  ContractInstances:    ${deployed.instances}`);
@@ -442,12 +414,28 @@ function printDeploymentSummary(
   console.log(`  ContractConsents:     ${deployed.consents}`);
   console.log(`  ContractSettlements:  ${deployed.settlements}`);
 
+  console.log("\nImplementation Addresses (do not interact directly):");
+  console.log(`  MockIXToken:          ${deployed.tokenImpl}`);
+  console.log(`  ContractTemplates:    ${deployed.templatesImpl}`);
+  console.log(`  ContractInstances:    ${deployed.instancesImpl}`);
+  console.log(`  ContractParties:      ${deployed.partiesImpl}`);
+  console.log(`  ContractResults:      ${deployed.resultsImpl}`);
+  console.log(`  ContractConsents:     ${deployed.consentsImpl}`);
+  console.log(`  ContractSettlements:  ${deployed.settlementsImpl}`);
+
+  console.log("\nRole Assignments:");
+  console.log("  CONTRACT_ROLE on Instances -> Results, Consents, Settlements");
+  console.log("  CONTRACT_ROLE on Parties   -> Settlements");
+  console.log("  SYSTEM_ROLE on Instances   -> deployer");
+  console.log("  OPERATOR_ROLE on Instances -> deployer");
+
   console.log("\nTransaction Hashes:");
   for (const [key, hash] of Object.entries(txHashes)) {
     console.log(`  ${key}: ${hash}`);
   }
 
-  console.log("\nTreasury Address:", TREASURY_ADDRESS);
+  console.log(`\nTotal deployment cost: ${(Number(gasUsed) / 1e18).toFixed(6)} ETH`);
+  console.log(`Remaining balance:    ${(Number(remainingBalance) / 1e18).toFixed(6)} ETH`);
   console.log("\n=== DEPLOYMENT COMPLETE ===");
 }
 
