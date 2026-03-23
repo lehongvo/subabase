@@ -1,30 +1,31 @@
 /**
  * IX Metaverse Contract System — Verify All Contracts on MegaETH Testnet
  *
- * Reads deployed addresses from deployments/megaeth-testnet.json
- * and verifies source code using MEGAETH_API_KEY.
+ * Verifies implementation contracts source code on MegaETH block explorer.
+ * Uses MEGAETH_API_KEY from .env.
  *
  * Usage:
- *   npx hardhat run scripts/verify-contracts.ts
+ *   npx hardhat run scripts/verify-contracts.ts --network megaethTestnet
  */
 
 import { network } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { execSync } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Contract names and their constructor args (implementation contracts have no constructor args)
-const CONTRACTS_TO_VERIFY = [
-  { name: "MockIXToken", constructorArgs: [] },
-  { name: "ContractTemplates", constructorArgs: [] },
-  { name: "ContractInstances", constructorArgs: [] },
-  { name: "ContractParties", constructorArgs: [] },
-  { name: "ContractResults", constructorArgs: [] },
-  { name: "ContractConsents", constructorArgs: [] },
-  { name: "ContractSettlements", constructorArgs: [] },
+// Implementation contracts to verify (these are the actual code, not proxies)
+const IMPLEMENTATIONS = [
+  { name: "MockIXToken", path: "contracts/mocks/MockIXToken.sol:MockIXToken", address: "0xf2aa8a13fe8c4d8585d69d606ba08927a08044ba" },
+  { name: "ContractTemplates", path: "contracts/ContractTemplates.sol:ContractTemplates", address: "0xf96147e8aada6541fdc142e7bc77157e92b2b9b1" },
+  { name: "ContractInstances", path: "contracts/ContractInstances.sol:ContractInstances", address: "0x05d202df16330437f68856e0c5ac49259cf9cfcd" },
+  { name: "ContractParties", path: "contracts/ContractParties.sol:ContractParties", address: "0x74d0653289cc66092d123690051d982f02e0d281" },
+  { name: "ContractResults", path: "contracts/ContractResults.sol:ContractResults", address: "0xcb48b719fe0b5580af762d813368748999671d4a" },
+  { name: "ContractConsents", path: "contracts/ContractConsents.sol:ContractConsents", address: "0x8f4000b0d02f65a6612c2bd63c0b60c689b4554c" },
+  { name: "ContractSettlements", path: "contracts/ContractSettlements.sol:ContractSettlements", address: "0xe4f1983fa766a59ba31605100cca556cd482e903" },
 ];
 
 async function main() {
@@ -32,88 +33,51 @@ async function main() {
   console.log("  IX Metaverse — Contract Source Verification");
   console.log("═══════════════════════════════════════════════\n");
 
-  // Load deployment addresses
-  const deploymentsPath = path.join(__dirname, "../deployments/megaeth-testnet.json");
-  if (!fs.existsSync(deploymentsPath)) {
-    console.error("❌ No deployment file found at", deploymentsPath);
-    console.error("   Run deploy-megaeth.ts first.");
-    process.exit(1);
-  }
-
-  const deployment = JSON.parse(fs.readFileSync(deploymentsPath, "utf-8"));
-  console.log("Network:", deployment.network);
-  console.log("Chain ID:", deployment.chainId);
-  console.log("Deployed at:", deployment.timestamp);
-  console.log("");
-
   const apiKey = process.env.MEGAETH_API_KEY;
   if (!apiKey) {
     console.error("❌ MEGAETH_API_KEY not found in .env");
     process.exit(1);
   }
-  console.log("API Key: ", apiKey.slice(0, 6) + "..." + apiKey.slice(-4));
+  console.log("API Key:", apiKey.slice(0, 6) + "..." + apiKey.slice(-4));
+  console.log("Network: megaethTestnet");
   console.log("");
 
-  // Verify each contract
   const results: { name: string; address: string; status: string }[] = [];
 
-  for (const contract of CONTRACTS_TO_VERIFY) {
-    const address = deployment.contracts?.[contract.name]
-      || deployment.implementations?.[contract.name]
-      || null;
-
-    if (!address) {
-      console.log(`⚠️  ${contract.name}: No address found in deployment file, skipping`);
-      results.push({ name: contract.name, address: "N/A", status: "SKIPPED" });
-      continue;
-    }
-
-    console.log(`🔍 Verifying ${contract.name} at ${address}...`);
+  for (const impl of IMPLEMENTATIONS) {
+    console.log(`🔍 Verifying ${impl.name} at ${impl.address}...`);
 
     try {
-      // Use hardhat verify task
-      // Note: This requires @nomicfoundation/hardhat-verify plugin
-      // and etherscan config in hardhat.config.ts
-      await (globalThis as any).hre?.run("verify:verify", {
-        address: address,
-        constructorArguments: contract.constructorArgs,
-        contract: `contracts/${contract.name}.sol:${contract.name}`,
+      const cmd = `npx hardhat verify --network megaethTestnet --contract "${impl.path}" ${impl.address} 2>&1`;
+      const output = execSync(cmd, {
+        cwd: path.join(__dirname, ".."),
+        timeout: 120000,
+        encoding: "utf-8",
       });
-      console.log(`   ✅ ${contract.name} verified!`);
-      results.push({ name: contract.name, address, status: "VERIFIED" });
-    } catch (error: any) {
-      if (error.message?.includes("Already Verified")) {
-        console.log(`   ✅ ${contract.name} already verified`);
-        results.push({ name: contract.name, address, status: "ALREADY VERIFIED" });
-      } else {
-        console.log(`   ❌ ${contract.name} verification failed: ${error.message?.slice(0, 100)}`);
-        results.push({ name: contract.name, address, status: "FAILED: " + error.message?.slice(0, 50) });
-      }
-    }
-  }
 
-  // Also try to verify proxy contracts if they exist
-  if (deployment.proxies) {
-    console.log("\n--- Proxy Contracts ---\n");
-    for (const [name, address] of Object.entries(deployment.proxies)) {
-      console.log(`🔍 Verifying proxy ${name} at ${address}...`);
-      try {
-        await (globalThis as any).hre?.run("verify:verify", {
-          address: address as string,
-          constructorArguments: [], // Proxy constructor args would need impl + admin + data
-        });
-        console.log(`   ✅ Proxy ${name} verified!`);
-        results.push({ name: `Proxy:${name}`, address: address as string, status: "VERIFIED" });
-      } catch (error: any) {
-        if (error.message?.includes("Already Verified")) {
-          console.log(`   ✅ Proxy ${name} already verified`);
-          results.push({ name: `Proxy:${name}`, address: address as string, status: "ALREADY VERIFIED" });
-        } else {
-          console.log(`   ❌ Proxy ${name} failed: ${error.message?.slice(0, 100)}`);
-          results.push({ name: `Proxy:${name}`, address: address as string, status: "FAILED" });
-        }
+      if (output.includes("Already Verified") || output.includes("already verified")) {
+        console.log(`   ✅ ${impl.name} — already verified`);
+        results.push({ name: impl.name, address: impl.address, status: "ALREADY VERIFIED" });
+      } else if (output.includes("Successfully verified") || output.includes("successfully verified")) {
+        console.log(`   ✅ ${impl.name} — verified!`);
+        results.push({ name: impl.name, address: impl.address, status: "VERIFIED" });
+      } else {
+        console.log(`   ⚠️  ${impl.name} — output: ${output.slice(0, 200)}`);
+        results.push({ name: impl.name, address: impl.address, status: "UNKNOWN: " + output.slice(0, 80) });
+      }
+    } catch (error: any) {
+      const errMsg = error.stdout || error.stderr || error.message || "";
+      if (errMsg.includes("Already Verified") || errMsg.includes("already verified")) {
+        console.log(`   ✅ ${impl.name} — already verified`);
+        results.push({ name: impl.name, address: impl.address, status: "ALREADY VERIFIED" });
+      } else {
+        console.log(`   ❌ ${impl.name} — failed: ${errMsg.slice(0, 200)}`);
+        results.push({ name: impl.name, address: impl.address, status: "FAILED: " + errMsg.slice(0, 80) });
       }
     }
+
+    // Small delay between verifications to avoid rate limiting
+    await new Promise(r => setTimeout(r, 2000));
   }
 
   // Summary
@@ -122,22 +86,22 @@ async function main() {
   console.log("═══════════════════════════════════════════════\n");
 
   for (const r of results) {
-    const icon = r.status.startsWith("VERIFIED") || r.status.startsWith("ALREADY")
-      ? "✅" : r.status === "SKIPPED" ? "⚠️" : "❌";
+    const icon = r.status.includes("VERIFIED") ? "✅" : "❌";
     console.log(`  ${icon} ${r.name.padEnd(25)} ${r.address.slice(0, 10)}... ${r.status}`);
   }
 
   const verified = results.filter(r => r.status.includes("VERIFIED")).length;
-  const total = results.filter(r => r.status !== "SKIPPED").length;
-  console.log(`\n  Result: ${verified}/${total} contracts verified`);
+  console.log(`\n  Result: ${verified}/${results.length} contracts verified`);
 
-  // Save verification report
-  const reportPath = path.join(__dirname, "../deployments/verification-report.json");
+  // Save report
+  const reportDir = path.join(__dirname, "../deployments");
+  if (!fs.existsSync(reportDir)) fs.mkdirSync(reportDir, { recursive: true });
+  const reportPath = path.join(reportDir, "verification-report.json");
   fs.writeFileSync(reportPath, JSON.stringify({ timestamp: new Date().toISOString(), results }, null, 2));
-  console.log(`\n  Report saved to: ${reportPath}`);
+  console.log(`  Report: ${reportPath}`);
 }
 
 main().catch((error) => {
-  console.error("\n❌ Verification failed:", error);
+  console.error("\n❌ Verification failed:", error.message);
   process.exitCode = 1;
 });

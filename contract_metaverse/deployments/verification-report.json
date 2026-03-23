@@ -1,0 +1,40 @@
+{
+  "timestamp": "2026-03-23T12:55:06.996Z",
+  "results": [
+    {
+      "name": "MockIXToken",
+      "address": "0xf2aa8a13fe8c4d8585d69d606ba08927a08044ba",
+      "status": "FAILED: \n=== Etherscan ===\nHHE80029: The Etherscan API key is empty.\n\n=== Blockscout ==="
+    },
+    {
+      "name": "ContractTemplates",
+      "address": "0xf96147e8aada6541fdc142e7bc77157e92b2b9b1",
+      "status": "FAILED: \n=== Etherscan ===\nHHE80029: The Etherscan API key is empty.\n\n=== Blockscout ==="
+    },
+    {
+      "name": "ContractInstances",
+      "address": "0x05d202df16330437f68856e0c5ac49259cf9cfcd",
+      "status": "FAILED: \n=== Etherscan ===\nHHE80029: The Etherscan API key is empty.\n\n=== Blockscout ==="
+    },
+    {
+      "name": "ContractParties",
+      "address": "0x74d0653289cc66092d123690051d982f02e0d281",
+      "status": "FAILED: \n=== Etherscan ===\nHHE80029: The Etherscan API key is empty.\n\n=== Blockscout ==="
+    },
+    {
+      "name": "ContractResults",
+      "address": "0xcb48b719fe0b5580af762d813368748999671d4a",
+      "status": "FAILED: \n=== Etherscan ===\nHHE80029: The Etherscan API key is empty.\n\n=== Blockscout ==="
+    },
+    {
+      "name": "ContractConsents",
+      "address": "0x8f4000b0d02f65a6612c2bd63c0b60c689b4554c",
+      "status": "FAILED: \n=== Etherscan ===\nHHE80029: The Etherscan API key is empty.\n\n=== Blockscout ==="
+    },
+    {
+      "name": "ContractSettlements",
+      "address": "0xe4f1983fa766a59ba31605100cca556cd482e903",
+      "status": "FAILED: \n=== Etherscan ===\nHHE80029: The Etherscan API key is empty.\n\n=== Blockscout ==="
+    }
+  ]
+}

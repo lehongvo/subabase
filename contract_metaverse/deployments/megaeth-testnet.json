@@ -1,0 +1,25 @@
+{
+  "network": "megaethTestnet",
+  "chainId": 6343,
+  "timestamp": "2026-03-23T19:40:00.000Z",
+  "deployer": "0x00000fc78106799b5b1dbd71f206d8f0218b28fe",
+  "treasury": "0x0000000000000000000000000000000000000001",
+  "totalCost": "0.000618 ETH",
+  "contracts": {
+    "MockIXToken": "0xf2aa8a13fe8c4d8585d69d606ba08927a08044ba",
+    "ContractTemplates": "0x97bdfed7cf222cdca32d7e6c751b6879a762c474",
+    "ContractInstances": "0x00b3ac1b04ff6712f7476bdb58c4f8c6895d853c",
+    "ContractParties": "0x4950b69979942c235e5b576826eedb77eaf6ff00",
+    "ContractResults": "0x1d13c2a5175651a51da741a9f5ebea1710b38bf5",
+    "ContractConsents": "0x6cac3a10870750ffd6ced2e882c5a5332cd7cf74",
+    "ContractSettlements": "0x8960ba72c560604688663e2c904fea3d3b2a68ff"
+  },
+  "implementations": {
+    "ContractTemplates": "0xf96147e8aada6541fdc142e7bc77157e92b2b9b1",
+    "ContractInstances": "0x05d202df16330437f68856e0c5ac49259cf9cfcd",
+    "ContractParties": "0x74d0653289cc66092d123690051d982f02e0d281",
+    "ContractResults": "0xcb48b719fe0b5580af762d813368748999671d4a",
+    "ContractConsents": "0x8f4000b0d02f65a6612c2bd63c0b60c689b4554c",
+    "ContractSettlements": "0xe4f1983fa766a59ba31605100cca556cd482e903"
+  }
+}
