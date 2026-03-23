@@ -95,11 +95,6 @@ interface IContractSettlements {
     /// @param consentsContract Address of the ContractConsents proxy
     function setConsentsContract(address consentsContract) external;
 
-    /// @notice Set the payment token address
-    /// @dev Access: onlyRole(DEFAULT_ADMIN_ROLE).
-    /// @param paymentToken Address of the ERC-20 token
-    function setPaymentToken(address paymentToken) external;
-
     // ========================================================================
     // VIEW FUNCTIONS
     // ========================================================================

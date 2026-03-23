@@ -111,7 +111,7 @@ contract ContractInstances is
     function createInstance(
         bytes32 templateId,
         bytes calldata metadata
-    ) external whenNotPaused returns (bytes32 instanceId) {
+    ) external onlyRole(SYSTEM_ROLE) whenNotPaused returns (bytes32 instanceId) {
         // --- Checks ---
         if (!_templatesContract.isTemplateActive(templateId)) {
             revert Types.TemplateNotActive(templateId);
@@ -250,6 +250,19 @@ contract ContractInstances is
             Types.ContractStatus.Settled,
             uint48(block.timestamp)
         );
+    }
+
+    /// @notice Set the on-chain tx hash after settlement broadcast
+    /// @dev Access: onlyRole(SYSTEM_ROLE).
+    /// @param instanceId The instance ID
+    /// @param txHash The on-chain transaction hash
+    function setTxHash(bytes32 instanceId, bytes32 txHash)
+        external
+        onlyRole(SYSTEM_ROLE)
+    {
+        if (!_instanceExists[instanceId]) revert Types.ContractNotFound(instanceId);
+        _instances[instanceId].txHash = txHash;
+        emit InstanceTxHashSet(instanceId, txHash);
     }
 
     /// @notice Set the ContractParties contract address

@@ -285,6 +285,35 @@ contract ContractTemplates is
         }
     }
 
+    /// @notice Get all active templates of a given type
+    /// @param contractType The contract type to filter by
+    /// @return templates Array of active template structs of the given type
+    function getActiveTemplatesByType(Types.ContractType contractType)
+        external
+        view
+        returns (Types.Template[] memory templates)
+    {
+        bytes32[] storage ids = _templatesByType[contractType];
+        uint256 totalCount = ids.length;
+        uint256 activeCount;
+
+        // First pass: count active templates of this type
+        for (uint256 i; i < totalCount; ++i) {
+            if (_templates[ids[i]].isActive) {
+                ++activeCount;
+            }
+        }
+
+        // Second pass: populate array
+        templates = new Types.Template[](activeCount);
+        uint256 idx;
+        for (uint256 i; i < totalCount; ++i) {
+            if (_templates[ids[i]].isActive) {
+                templates[idx++] = _templates[ids[i]];
+            }
+        }
+    }
+
     /// @notice Get the total number of registered templates
     /// @return count Total template count
     function getTemplateCount() external view returns (uint256 count) {

@@ -107,6 +107,12 @@ interface IContractTemplates {
     /// @return templates Array of active template structs
     function getActiveTemplates() external view returns (Types.Template[] memory templates);
 
+    /// @notice Get all active templates of a given type
+    /// @param contractType The contract type to filter by (RPS, WorkReward, Tournament, Custom)
+    /// @return templates Array of active template structs of the given type
+    function getActiveTemplatesByType(Types.ContractType contractType)
+        external view returns (Types.Template[] memory templates);
+
     /// @notice Get the total number of registered templates
     /// @return count Total template count
     function getTemplateCount() external view returns (uint256 count);

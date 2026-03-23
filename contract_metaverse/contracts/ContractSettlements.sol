@@ -439,18 +439,6 @@ contract ContractSettlements is
         _templatesContract = IContractTemplates(templatesContract);
     }
 
-    /// @notice Set the payment token address
-    /// @param paymentToken Address of the ERC-20 token
-    function setPaymentToken(address paymentToken)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
-        if (paymentToken == address(0)) {
-            revert Types.ZeroAddress();
-        }
-        _paymentToken = IERC20(paymentToken);
-    }
-
     /// @notice Pause the contract (emergency stop)
     /// @dev Access: onlyRole(ADMIN_ROLE)
     function pause() external onlyRole(ADMIN_ROLE) {

@@ -84,6 +84,12 @@ interface IContractInstances {
     /// @param instanceId The instance to settle
     function settleInstance(bytes32 instanceId) external;
 
+    /// @notice Set the on-chain tx hash after settlement broadcast
+    /// @dev Access: onlyRole(SYSTEM_ROLE).
+    /// @param instanceId The instance ID
+    /// @param txHash The on-chain transaction hash
+    function setTxHash(bytes32 instanceId, bytes32 txHash) external;
+
     /// @notice Set the ContractParties contract address (post-deploy linkage)
     /// @dev Access: onlyRole(DEFAULT_ADMIN_ROLE).
     /// @param partiesContract Address of the ContractParties proxy

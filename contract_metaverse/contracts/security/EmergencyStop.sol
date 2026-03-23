@@ -101,6 +101,9 @@ abstract contract EmergencyStop {
     /// @notice Thrown when the recovery delay value is invalid (zero)
     error InvalidRecoveryDelay();
 
+    /// @notice Thrown when the recovery target address is invalid (zero address)
+    error InvalidRecoveryTarget();
+
     // ========================================================================
     // MODIFIERS
     // ========================================================================
@@ -203,7 +206,7 @@ abstract contract EmergencyStop {
     /// @return requestId The unique identifier for this recovery request
     function requestRecovery(address target) external returns (bytes32 requestId) {
         _checkEmergencyAccess(msg.sender);
-        if (target == address(0)) revert InvalidRecoveryDelay();
+        if (target == address(0)) revert InvalidRecoveryTarget();
 
         requestId = keccak256(abi.encodePacked(target, block.timestamp, msg.sender));
         uint256 unlockTime = block.timestamp + _recoveryDelay;

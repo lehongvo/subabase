@@ -78,14 +78,17 @@ contract ContractConsents is
     /// @param defaultAdmin Address granted DEFAULT_ADMIN_ROLE
     /// @param instancesContract Address of the ContractInstances proxy
     /// @param partiesContract Address of the ContractParties proxy
+    /// @param templatesContract Address of the ContractTemplates proxy (for timeout lookup)
     function initialize(
         address defaultAdmin,
         address instancesContract,
-        address partiesContract
+        address partiesContract,
+        address templatesContract
     ) external initializer {
         if (defaultAdmin == address(0)) revert Types.ZeroAddress();
         if (instancesContract == address(0)) revert Types.ZeroAddress();
         if (partiesContract == address(0)) revert Types.ZeroAddress();
+        if (templatesContract == address(0)) revert Types.ZeroAddress();
 
         __AccessControl_init();
         __Pausable_init();
@@ -96,6 +99,7 @@ contract ContractConsents is
 
         _instancesContract = IContractInstances(instancesContract);
         _partiesContract = IContractParties(partiesContract);
+        _templatesContract = IContractTemplates(templatesContract);
     }
 
     // ========================================================================
@@ -169,10 +173,11 @@ contract ContractConsents is
             emit DisputeRaised(instanceId, userId, reason, consentedAt);
 
             // --- Interactions ---
-            // Only trigger dispute transition if instance is still in Completed state
+            // Only trigger dispute transition if instance was in Completed state
             // (avoids double-dispatch if another party already triggered it)
-            Types.ContractStatus currentStatus = _instancesContract.getInstanceStatus(instanceId);
-            if (currentStatus == Types.ContractStatus.Completed) {
+            // Uses cached status from the initial check — no external calls happen
+            // between the first read and here that could change instance status.
+            if (status == Types.ContractStatus.Completed) {
                 _instancesContract.disputeInstance(instanceId);
             }
         }
@@ -188,6 +193,12 @@ contract ContractConsents is
         address userId
     ) external onlyRole(SERVER_ROLE) whenNotPaused {
         // --- Checks ---
+        // Verify instance is in a valid state for auto-consent
+        Types.ContractStatus status = _instancesContract.getInstanceStatus(instanceId);
+        if (status != Types.ContractStatus.Completed && status != Types.ContractStatus.Resolved) {
+            revert Types.InvalidState(instanceId, status);
+        }
+
         // Deadline must have been set (at least one consent already submitted)
         uint48 deadline = _consentDeadline[instanceId];
         if (deadline == 0) {

@@ -154,15 +154,29 @@ contract ContractParties is
         // 3. Validate escrow amount is non-zero
         if (escrowAmount == 0) revert Types.InvalidAmount();
 
-        // 4. Validate escrow amount against template conditions
+        // 4. Validate template is active and escrow amount against template conditions
         bytes32 templateId = _instancesContract.getInstanceTemplateId(instanceId);
         Types.Template memory tmpl = _templatesContract.getTemplate(templateId);
+
+        if (!tmpl.isActive) {
+            revert Types.TemplateNotActive(templateId);
+        }
+
         (uint256 minBet, uint256 maxBet,,) = abi.decode(
             tmpl.conditions,
             (uint256, uint256, uint256, uint256)
         );
         if (escrowAmount < minBet || escrowAmount > maxBet) {
             revert Types.BetOutOfRange(escrowAmount, uint128(minBet), uint128(maxBet));
+        }
+
+        // 5. Validate escrowType matches template paymentType
+        if (tmpl.paymentType != Types.PaymentType.Both) {
+            // If template requires IX_POINT, escrowType must be IX_POINT (0==0)
+            // If template requires IX_FREE_POINT, escrowType must be IX_FREE_POINT (1==1)
+            if (uint8(tmpl.paymentType) != uint8(escrowType)) {
+                revert Types.PaymentTypeMismatch(uint8(tmpl.paymentType), uint8(escrowType));
+            }
         }
 
         // --- Effects ---
@@ -215,6 +229,16 @@ contract ContractParties is
         if (to == address(0)) revert Types.ZeroAddress();
         if (amount == 0) revert Types.InvalidAmount();
 
+        // Verify cumulative release does not exceed total escrow for this instance
+        uint128 totalEscrow = this.getTotalEscrow(instanceId);
+        uint128 newTotalReleased = _totalReleased[instanceId] + amount;
+        if (newTotalReleased > totalEscrow) {
+            revert Types.EscrowOverRelease(instanceId, totalEscrow, newTotalReleased);
+        }
+
+        // --- Effects ---
+        _totalReleased[instanceId] = newTotalReleased;
+
         // --- Interactions ---
         _paymentToken.safeTransfer(to, amount);
 
@@ -241,7 +265,7 @@ contract ContractParties is
             address userId = party.userId;
 
             // --- Effects ---
-            party.escrowStatus = Types.EscrowStatus.Released;
+            party.escrowStatus = Types.EscrowStatus.Refunded;
 
             // --- Interactions ---
             if (amount > 0) {

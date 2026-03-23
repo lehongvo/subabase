@@ -28,3 +28,19 @@
 
 # Environment variables
 .env
+
+# Lock files
+yarn.lock
+package-lock.json
+pnpm-lock.yaml
+bun.lockb
+
+# Editor settings
+.vscode/
+.idea/
+.cursor/
+.cursorrules
+.cursorignore
+.cursorignorerules
+.cursorignorerulesrules
+.cursorignorerulesrulesrules
