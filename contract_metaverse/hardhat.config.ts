@@ -49,4 +49,19 @@ export default defineConfig({
       accounts: [configVariable("PRIVATE_KEY")],
     },
   },
+  etherscan: {
+    apiKey: {
+      megaethTestnet: configVariable("MEGAETH_API_KEY"),
+    },
+    customChains: [
+      {
+        network: "megaethTestnet",
+        chainId: 6342,
+        urls: {
+          apiURL: "https://megaexplorer.xyz/api",
+          browserURL: "https://megaexplorer.xyz",
+        },
+      },
+    ],
+  },
 });

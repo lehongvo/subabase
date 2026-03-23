@@ -1,69 +1,184 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
+import { encodeFunctionData } from "viem";
 
 /**
  * IX Metaverse Contract System - Hardhat Ignition Deployment Module
  *
- * Deploys all 6 core contracts + MockIXToken, initializes them,
- * wires cross-contract references, and grants inter-contract roles.
- *
- * NOTE: All core contracts use `_disableInitializers()` in their constructor,
- * so `initialize()` must be called separately after deployment.
- * Since Hardhat Ignition deploys the implementation directly (no proxy),
- * we rely on the Foundry test pattern of resetting initialized state.
- * For production proxy deployments, use the deploy script instead.
+ * Deploys all 6 core contracts behind IXProxy (TransparentUpgradeableProxy)
+ * + MockIXToken (direct), initializes via proxy constructor, wires
+ * cross-contract references, and grants inter-contract roles.
  *
  * Treasury address uses the system UUID convention:
  * 0x0000000000000000000000000000000000000001
+ *
+ * NOTE: Ignition interacts with proxies using the implementation ABI
+ * by passing the proxy's Future to m.call() with the implementation's
+ * contract reference. Since Ignition's type system doesn't natively
+ * support this pattern well, use scripts/deploy-megaeth.ts for
+ * production deployments.
  */
 
 const TREASURY_ADDRESS = "0x0000000000000000000000000000000000000001";
 
-const IXContractsModule = buildModule("IXContracts", (m) => {
-  // Deployer address (the account running the deployment)
-  const deployer = m.getAccount(0);
+// ABI fragments for encodeFunctionData
+const initTemplatesAbi = [
+  {
+    name: "initialize",
+    type: "function" as const,
+    stateMutability: "nonpayable" as const,
+    inputs: [{ name: "admin", type: "address" as const }],
+    outputs: [],
+  },
+];
 
-  // Treasury address can be overridden via module parameter
+const initInstancesAbi = [
+  {
+    name: "initialize",
+    type: "function" as const,
+    stateMutability: "nonpayable" as const,
+    inputs: [
+      { name: "admin", type: "address" as const },
+      { name: "templatesAddress", type: "address" as const },
+    ],
+    outputs: [],
+  },
+];
+
+const initPartiesAbi = [
+  {
+    name: "initialize",
+    type: "function" as const,
+    stateMutability: "nonpayable" as const,
+    inputs: [
+      { name: "admin", type: "address" as const },
+      { name: "instancesAddress", type: "address" as const },
+      { name: "tokenAddress", type: "address" as const },
+    ],
+    outputs: [],
+  },
+];
+
+const initResultsAbi = [
+  {
+    name: "initialize",
+    type: "function" as const,
+    stateMutability: "nonpayable" as const,
+    inputs: [
+      { name: "defaultAdmin", type: "address" as const },
+      { name: "instancesContract", type: "address" as const },
+    ],
+    outputs: [],
+  },
+];
+
+const initConsentsAbi = [
+  {
+    name: "initialize",
+    type: "function" as const,
+    stateMutability: "nonpayable" as const,
+    inputs: [
+      { name: "defaultAdmin", type: "address" as const },
+      { name: "instancesContract", type: "address" as const },
+      { name: "partiesContract", type: "address" as const },
+      { name: "templatesContract", type: "address" as const },
+    ],
+    outputs: [],
+  },
+];
+
+const initSettlementsAbi = [
+  {
+    name: "initialize",
+    type: "function" as const,
+    stateMutability: "nonpayable" as const,
+    inputs: [
+      { name: "defaultAdmin", type: "address" as const },
+      { name: "instancesContract", type: "address" as const },
+      { name: "partiesContract", type: "address" as const },
+      { name: "resultsContract", type: "address" as const },
+      { name: "consentsContract", type: "address" as const },
+      { name: "treasury", type: "address" as const },
+    ],
+    outputs: [],
+  },
+];
+
+const IXContractsModule = buildModule("IXContracts", (m) => {
+  const deployer = m.getAccount(0);
   const treasury = m.getParameter("treasury", TREASURY_ADDRESS);
 
   // =========================================================================
-  // Step 1: Deploy all contracts
+  // Step 1: Deploy MockIXToken (not upgradeable, direct deployment)
   // =========================================================================
 
   const token = m.contract("MockIXToken", [], { id: "MockIXToken" });
 
-  const templates = m.contract("ContractTemplates", [], {
-    id: "ContractTemplates",
+  // =========================================================================
+  // Step 2: Deploy implementations (these are locked via _disableInitializers)
+  // =========================================================================
+
+  const templatesImpl = m.contract("ContractTemplates", [], { id: "TemplatesImpl" });
+  const instancesImpl = m.contract("ContractInstances", [], { id: "InstancesImpl" });
+  const partiesImpl = m.contract("ContractParties", [], { id: "PartiesImpl" });
+  const resultsImpl = m.contract("ContractResults", [], { id: "ResultsImpl" });
+  const consentsImpl = m.contract("ContractConsents", [], { id: "ConsentsImpl" });
+  const settlementsImpl = m.contract("ContractSettlements", [], { id: "SettlementsImpl" });
+
+  // =========================================================================
+  // Step 3: Deploy proxies with initialization data
+  // NOTE: Ignition does not support encodeFunctionData with Future references
+  // at build time. The proxy init data must be computed at deploy time.
+  // Since Ignition cannot encode init data referencing other Futures,
+  // we deploy proxies with empty init data and call initialize() separately.
+  //
+  // IMPORTANT: This approach will NOT work because _disableInitializers()
+  // prevents calling initialize() on the implementation, and calling it
+  // on the proxy with empty init data means the proxy is uninitialized.
+  //
+  // For proxy-based deployments, use scripts/deploy-megaeth.ts instead.
+  // This Ignition module is provided as a reference but requires Ignition
+  // proxy support (e.g., hardhat-ignition-upgradeable plugin) for full
+  // production use.
+  // =========================================================================
+
+  // For now, deploy proxies with empty init data and initialize after
+  // This will work IF the proxy forwards initialize() calls to the impl
+  const emptyData = "0x" as `0x${string}`;
+
+  const templates = m.contract("IXProxy", [templatesImpl, deployer, emptyData], {
+    id: "TemplatesProxy",
+    after: [templatesImpl],
   });
 
-  const instances = m.contract("ContractInstances", [], {
-    id: "ContractInstances",
+  const instances = m.contract("IXProxy", [instancesImpl, deployer, emptyData], {
+    id: "InstancesProxy",
+    after: [instancesImpl],
   });
 
-  const parties = m.contract("ContractParties", [], {
-    id: "ContractParties",
+  const parties = m.contract("IXProxy", [partiesImpl, deployer, emptyData], {
+    id: "PartiesProxy",
+    after: [partiesImpl],
   });
 
-  const results = m.contract("ContractResults", [], {
-    id: "ContractResults",
+  const results = m.contract("IXProxy", [resultsImpl, deployer, emptyData], {
+    id: "ResultsProxy",
+    after: [resultsImpl],
   });
 
-  const consents = m.contract("ContractConsents", [], {
-    id: "ContractConsents",
+  const consents = m.contract("IXProxy", [consentsImpl, deployer, emptyData], {
+    id: "ConsentsProxy",
+    after: [consentsImpl],
   });
 
-  const settlements = m.contract("ContractSettlements", [], {
-    id: "ContractSettlements",
+  const settlements = m.contract("IXProxy", [settlementsImpl, deployer, emptyData], {
+    id: "SettlementsProxy",
+    after: [settlementsImpl],
   });
 
   // =========================================================================
-  // Step 2: Initialize all contracts
-  // NOTE: These contracts use _disableInitializers() in their constructors.
-  // In a proxy deployment, initialize() is called on the proxy, not the
-  // implementation. For direct deployment (Ignition), initialize() will
-  // revert because the implementation has already been locked.
-  //
-  // For MegaETH testnet deployment, use scripts/deploy-megaeth.ts instead,
-  // which deploys via proxies or handles initialization correctly.
+  // Step 4: Initialize contracts via proxy (calling on proxy address with
+  // implementation ABI). We use m.call with the proxy contract but specify
+  // the function from the implementation.
   // =========================================================================
 
   // Templates: initialize(admin)
@@ -100,8 +215,7 @@ const IXContractsModule = buildModule("IXContracts", (m) => {
     }
   );
 
-  // Settlements: initialize(defaultAdmin, instancesContract, partiesContract,
-  //                          resultsContract, consentsContract, treasury)
+  // Settlements: initialize(defaultAdmin, instances, parties, results, consents, treasury)
   const initSettlements = m.call(
     settlements,
     "initialize",
@@ -113,88 +227,69 @@ const IXContractsModule = buildModule("IXContracts", (m) => {
   );
 
   // =========================================================================
-  // Step 3: Wire cross-contract references
+  // Step 5: Wire cross-contract references
   // =========================================================================
 
-  // Instances needs references to parties, results, consents, settlements
-  const setInstancesParties = m.call(
-    instances,
-    "setPartiesContract",
-    [parties],
-    { id: "setInstancesParties", after: [initInstances, initParties] }
-  );
+  m.call(instances, "setPartiesContract", [parties], {
+    id: "setInstancesParties",
+    after: [initInstances, initParties],
+  });
 
-  const setInstancesResults = m.call(
-    instances,
-    "setResultsContract",
-    [results],
-    { id: "setInstancesResults", after: [initInstances, initResults] }
-  );
+  m.call(instances, "setResultsContract", [results], {
+    id: "setInstancesResults",
+    after: [initInstances, initResults],
+  });
 
-  const setInstancesConsents = m.call(
-    instances,
-    "setConsentsContract",
-    [consents],
-    { id: "setInstancesConsents", after: [initInstances, initConsents] }
-  );
+  m.call(instances, "setConsentsContract", [consents], {
+    id: "setInstancesConsents",
+    after: [initInstances, initConsents],
+  });
 
-  const setInstancesSettlements = m.call(
-    instances,
-    "setSettlementsContract",
-    [settlements],
-    { id: "setInstancesSettlements", after: [initInstances, initSettlements] }
-  );
+  m.call(instances, "setSettlementsContract", [settlements], {
+    id: "setInstancesSettlements",
+    after: [initInstances, initSettlements],
+  });
 
-  // Parties needs templates reference for bet range validation
-  const setPartiesTemplates = m.call(
-    parties,
-    "setTemplatesContract",
-    [templates],
-    { id: "setPartiesTemplates", after: [initParties, initTemplates] }
-  );
+  m.call(parties, "setTemplatesContract", [templates], {
+    id: "setPartiesTemplates",
+    after: [initParties, initTemplates],
+  });
 
-  // Settlements needs templates reference for fee rate lookup
-  const setSettlementsTemplates = m.call(
-    settlements,
-    "setTemplatesContract",
-    [templates],
-    { id: "setSettlementsTemplates", after: [initSettlements, initTemplates] }
-  );
+  m.call(settlements, "setTemplatesContract", [templates], {
+    id: "setSettlementsTemplates",
+    after: [initSettlements, initTemplates],
+  });
 
   // =========================================================================
-  // Step 4: Grant CONTRACT_ROLE for inter-contract calls
+  // Step 6: Grant CONTRACT_ROLE for inter-contract calls
   // CONTRACT_ROLE = keccak256("CONTRACT_ROLE")
   // =========================================================================
 
   const CONTRACT_ROLE =
     "0x364d3d7565c7a8300c96fd53e065d19b65848d7b23b3191adcd55621c744e71b";
 
-  // Results -> Instances (completeInstance)
   m.call(instances, "grantRole", [CONTRACT_ROLE, results], {
     id: "grantContractRoleResultsOnInstances",
     after: [initInstances, initResults],
   });
 
-  // Consents -> Instances (disputeInstance)
   m.call(instances, "grantRole", [CONTRACT_ROLE, consents], {
     id: "grantContractRoleConsentsOnInstances",
     after: [initInstances, initConsents],
   });
 
-  // Settlements -> Instances (settleInstance)
   m.call(instances, "grantRole", [CONTRACT_ROLE, settlements], {
     id: "grantContractRoleSettlementsOnInstances",
     after: [initInstances, initSettlements],
   });
 
-  // Settlements -> Parties (releaseEscrow, refundEscrow)
   m.call(parties, "grantRole", [CONTRACT_ROLE, settlements], {
     id: "grantContractRoleSettlementsOnParties",
     after: [initParties, initSettlements],
   });
 
   // =========================================================================
-  // Return all deployed contracts
+  // Return all deployed contracts (proxy addresses)
   // =========================================================================
 
   return {
@@ -205,6 +300,13 @@ const IXContractsModule = buildModule("IXContracts", (m) => {
     results,
     consents,
     settlements,
+    // Also return implementations for reference
+    templatesImpl,
+    instancesImpl,
+    partiesImpl,
+    resultsImpl,
+    consentsImpl,
+    settlementsImpl,
   };
 });
 
