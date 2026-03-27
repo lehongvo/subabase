@@ -1,28 +1,102 @@
 IX METAVERSE — DB DESIGN & API DESIGN (cho Frontend)
 ================================================================
 
-Project:  IX Metaverse Contract Management System
-Backend:  Supabase Cloud (PostgreSQL + PostgREST auto-generated REST API)
-Base URL: https://veoillsstewpnvmhxmlx.supabase.co
+Document ID:  IX-API-FRONTEND-001
+Version:      1.0.0
+Date:         2026-03-27
+Author:       Vo Le (Backend Lead)
+Audience:     Frontend Development Team
+
 
 ================================================================
-1. AUTHENTICATION
+1. PROJECT OVERVIEW
 ================================================================
 
-Moi request can header:
+1.1 He thong la gi?
+-------------------
+IX Metaverse Contract Management System — quan ly tat ca "tuong tac dua tren
+dong thuan" (contracts) giua users trong metaverse IX.
 
-  apikey: <SUPABASE_ANON_KEY>
-  Authorization: Bearer <USER_JWT_TOKEN>
+  Vi du contract:
+    RPS (Keo-bua-bao):  User vs User, dat cuoc point theo ket qua
+    Work Reward:         Thanh toan khi hoan thanh cong viec (Worker vs Client)
+    Tournament:          Thu phi tham gia va chia giai thuong (Participant vs Organizer)
+    Custom:              Template tuy chinh do Admin dinh nghia
 
-- Anon Key (public, embed trong FE): dung cho moi request
-- JWT Token: lay sau khi user login qua Supabase Auth
-
-================================================================
-2. DATABASE DESIGN
-================================================================
-
-2.1 ENUM Types
+1.2 Phase Plan
 --------------
+  Phase 0 (HIEN TAI)  ->  Phase 1          ->  Phase 2            ->  Phase 3
+  Off-chain (Supabase)    On-chain MegaETH     IX Economic Token      DAO Governance
+  IX Points / Free Pts    USDT                 ERC-20 Token           Governance Token
+
+  Phase   Thanh toan                Quan ly              Muc tieu
+  ------  ------------------------  -------------------  --------------------------------
+  0 (now) IX Points / IX Free Pts  Off-chain (Supabase) UX validation, user acquisition
+  1       USDT tren MegaETH        Smart contracts      On-chain migration
+  2       IX Economic Token ERC-20 Smart contracts      Token economy
+  3       Economic + Gov Token     DAO                  Community governance
+
+  FE dang build cho Phase 0. DB schema thiet ke san de map 1:1 sang smart contract Phase 1.
+
+1.3 IX Points vs IX Free Points
+--------------------------------
+                  IX Points                     IX Free Points
+  Cach co:        Mua / nhan thuong             Phat mien phi, login bonus...
+  Dung cho:       Hop dong production (that)    Luyen tap / hop dong rui ro thap
+  Chuyen doi:     Co (tuong lai -> token)       KHONG
+  Gia tri:        Co gia tri that               Khong co gia tri that
+
+  FE can hien thi ro rang user dang dung loai point nao. KHONG duoc tron lan 2 loai.
+
+1.4 He thong lien quan
+-----------------------
+  IX-Government-platform:  Admin dashboard, quan ly user, he thong point (da co)
+  IX Metaverse:            Nguon event, moi truong thuc thi contract
+  MegaETH:                 Blockchain (tu Phase 1 tro di)
+
+
+================================================================
+2. CONNECTION INFO
+================================================================
+
+Platform:     Supabase Cloud
+Project URL:  https://veoillsstewpnvmhxmlx.supabase.co
+REST API:     https://veoillsstewpnvmhxmlx.supabase.co/rest/v1
+Anon Key:     (lay tu Settings > API > Project API keys > anon public)
+
+Headers (moi request deu can):
+
+  apikey: <ANON_KEY>
+  Authorization: Bearer <USER_JWT_TOKEN>
+  Content-Type: application/json
+
+
+================================================================
+3. DB DESIGN
+================================================================
+
+2.1 Tong quan
+-------------
+
+  contract_templates   <-- Admin tao template (RPS, Work Reward...)
+        |
+        | 1 template -> N instances
+        v
+  contract_instances   <-- Moi tran dau / hop dong cu the
+        |
+   +----|--------+-------------+
+   |    |        |             |
+   v    v        v             v
+ parties results consents  settlements
+ (ai choi)(ket qua)(dong y?)(thanh toan)
+
+  point_balances       <-- So du point cua moi user
+  public_ledger        <-- VIEW tong hop (read-only, cho public)
+
+
+2.2 ENUM Types
+--------------
+
   contract_type:        rps | work_reward | tournament | custom
   contract_status:      created | active | completed | disputed | resolved | settled
   payment_type:         ix_point | ix_free_point | both
@@ -30,355 +104,890 @@ Moi request can header:
   chain_record_policy:  required | optional | off
   result_source:        system | user
 
-2.2 Tables
-----------
+
+2.3 Chi tiet tung Table
+------------------------
 
 --- contract_templates (Template hop dong - Admin quan ly) ---
 
-  Column                    Type                  Required  Default    Mo ta
-  ---------------------------------------------------------------------------------
-  id                        uuid                  PK        auto       Template ID
-  name                      varchar               yes       -          Ten template
-  description               text                  no        -          Mo ta
-  type                      contract_type         yes       -          Loai: rps, work_reward, tournament, custom
-  conditions                jsonb                 yes       -          Dieu kien (min_bet, max_bet, rounds, timeout...)
-  reward_rules              jsonb                 yes       -          Quy tac thuong (payout splits, draw refund...)
-  payment_type              payment_type          yes       both       Loai point chap nhan
-  fee_rate                  numeric               yes       5.0        Phi platform (%), vd: 5.00 = 5%
-  chain_record_policy       chain_record_policy   yes       off        Chinh sach ghi blockchain
-  chain_record_description  text                  no        -          Text hien thi cho user khi policy=optional
-  is_active                 boolean               yes       false      Template dang hoat dong?
-  metaverse_event_id        varchar               no        -          ID event metaverse lien ket
-  created_by                uuid                  yes       -          Admin tao
-  created_at                timestamptz           yes       now()
-  updated_at                timestamptz           yes       now()
+  Template do Admin tao. Dinh nghia loai hop dong, dieu kien, phi...
+
+  Column                    Type                  Null      Default    Mo ta
+  -----------------------------------------------------------------------------------------
+  id                        uuid                  PK        auto
+  name                      varchar               NOT NULL  -          Ten hien thi
+  description               text                  NULL      -          Mo ta
+  type                      contract_type         NOT NULL  -          rps/work_reward/tournament/custom
+  conditions                jsonb                 NOT NULL  -          Dieu kien hop dong
+  reward_rules              jsonb                 NOT NULL  -          Quy tac thuong
+  payment_type              payment_type          NOT NULL  both       Loai point chap nhan
+  fee_rate                  numeric               NOT NULL  5.0        Phi platform (%)
+  chain_record_policy       chain_record_policy   NOT NULL  off        Ghi blockchain?
+  chain_record_description  text                  NULL      -          Text cho user khi optional
+  is_active                 boolean               NOT NULL  false      Dang hoat dong?
+  metaverse_event_id        varchar               NULL      -          Event ID lien ket
+  created_by                uuid                  NOT NULL  -          Admin tao
+  created_at                timestamptz           NOT NULL  now()
+  updated_at                timestamptz           NOT NULL  now()
+
+  Data thuc te:
+  {
+    "id": "20000000-0000-0000-0000-000000000001",
+    "name": "RPS Casual Lobby 1",
+    "description": "Casual rock-paper-scissors for beginners. Low stakes, fast rounds.",
+    "type": "rps",
+    "conditions": {
+      "rounds": 1,
+      "max_bet": 100,
+      "min_bet": 10,
+      "timeout_seconds": 15
+    },
+    "reward_rules": {
+      "winner_pct": 95,
+      "draw_refund": true
+    },
+    "payment_type": "ix_free_point",
+    "fee_rate": 3.0,
+    "chain_record_policy": "off",
+    "is_active": true,
+    "metaverse_event_id": "evt_rps_001",
+    "created_by": "10000000-0000-0000-0000-000000000001",
+    "created_at": "2026-03-22T11:29:30.010771+00:00",
+    "updated_at": "2026-03-22T11:29:30.010771+00:00"
+  }
+
+  conditions fields: min_bet (toi thieu), max_bet (toi da), rounds (so van), timeout_seconds (thoi gian cho consent)
+  reward_rules fields: winner_pct (% winner nhan, 95=95%), draw_refund (hoa -> hoan tien?)
 
 
 --- contract_instances (Instance hop dong cu the) ---
 
-  Column          Type               Required  Default    Mo ta
-  ---------------------------------------------------------------------------------
-  id              uuid               PK        auto       Instance ID
-  template_id     uuid               FK        -          -> contract_templates.id
-  status          contract_status    yes       created    Trang thai lifecycle
-  chain_record    boolean            yes       false      Co ghi on-chain khong
-  tx_hash         varchar            no        -          Transaction hash (Phase 1+)
-  metadata        jsonb              no        -          Data mo rong: game room, match details...
-  created_at      timestamptz        yes       now()
-  activated_at    timestamptz        no        -          Thoi diem activate
-  completed_at    timestamptz        no        -          Thoi diem complete
-  settled_at      timestamptz        no        -          Thoi diem settle
+  Moi tran dau / hop dong cu the, tao tu template.
 
-  Lifecycle:
+  Column          Type               Null      Default    Mo ta
+  -----------------------------------------------------------------------------------------
+  id              uuid               PK        auto
+  template_id     uuid               FK        -          -> contract_templates.id
+  status          contract_status    NOT NULL  created    Trang thai hien tai
+  chain_record    boolean            NOT NULL  false      Ghi on-chain?
+  tx_hash         varchar            NULL      -          Transaction hash (Phase 1+)
+  metadata        jsonb              NULL      -          Data mo rong
+  created_at      timestamptz        NOT NULL  now()
+  activated_at    timestamptz        NULL      -          Bat dau choi
+  completed_at    timestamptz        NULL      -          Co ket qua
+  settled_at      timestamptz        NULL      -          Thanh toan xong
+
+  Lifecycle (state machine):
     Created --> Active --> Completed --> Settled
                               |
                           Disputed --> Resolved --> Settled
 
+  Data thuc te:
+  {
+    "id": "30000000-0000-0000-0000-000000000001",
+    "template_id": "20000000-0000-0000-0000-000000000002",
+    "status": "settled",
+    "chain_record": false,
+    "tx_hash": null,
+    "metadata": {
+      "room_id": "room_0001",
+      "match_id": "match_c4ca4238a0b923820dcc509a6f75849b"
+    },
+    "created_at": "2025-12-13T11:29:30.305244+00:00",
+    "activated_at": "2025-12-13T11:34:30.305244+00:00",
+    "completed_at": "2025-12-13T11:39:30.305244+00:00",
+    "settled_at": "2025-12-13T11:44:30.305244+00:00"
+  }
+
 
 --- contract_parties (Cac ben tham gia) ---
 
-  Column               Type         Required  Default  Mo ta
-  ---------------------------------------------------------------------------------
+  Ai tham gia hop dong, dat bao nhieu point.
+
+  Column               Type         Null      Default  Mo ta
+  -----------------------------------------------------------------------------------------
   id                   uuid         PK        auto
   contract_id          uuid         FK        -        -> contract_instances.id
-  user_id              uuid         yes       -        User tham gia
-  role                 varchar      yes       -        Vai tro: challenger/opponent (RPS), worker/client...
-  escrow_amount        numeric      yes       0        So point ky quy
-  escrow_type          point_type   yes       -        Loai point ky quy
-  escrow_status        varchar      yes       held     held / released / refunded
-  chain_record_choice  boolean      no        -        User chon ghi on-chain (khi policy=optional)
-  joined_at            timestamptz  yes       now()
+  user_id              uuid         NOT NULL  -        User tham gia
+  role                 varchar      NOT NULL  -        Vai tro
+  escrow_amount        numeric      NOT NULL  0        So point ky quy
+  escrow_type          point_type   NOT NULL  -        Loai point
+  escrow_status        varchar      NOT NULL  held     held / released / refunded
+  chain_record_choice  boolean      NULL      -        User chon ghi on-chain?
+  joined_at            timestamptz  NOT NULL  now()
+
+  Roles theo loai contract:
+    rps:         challenger / opponent
+    work_reward: worker / client
+    tournament:  participant / organizer
+
+  Data thuc te:
+  {
+    "id": "40000000-0001-0000-0000-000000000001",
+    "contract_id": "30000000-0000-0000-0000-000000000001",
+    "user_id": "10000000-0000-0000-0000-000000000002",
+    "role": "challenger",
+    "escrow_amount": 60.0,
+    "escrow_type": "ix_free_point",
+    "escrow_status": "released",
+    "chain_record_choice": null,
+    "joined_at": "2025-12-13T11:30:30.305244+00:00"
+  }
 
 
 --- contract_results (Ket qua) ---
 
-  Column        Type           Required  Default   Mo ta
-  ---------------------------------------------------------------------------------
+  Ket qua tran dau. Thuong do game server (system) gui.
+
+  Column        Type           Null      Default   Mo ta
+  -----------------------------------------------------------------------------------------
   id            uuid           PK        auto
   contract_id   uuid           FK        -         -> contract_instances.id
-  result_data   jsonb          yes       -         Ket qua JSON (winner, score, moves...)
-  reported_by   result_source  yes       system    system hoac user
-  reporter_id   uuid           no        -         ID nguoi/system bao ket qua
-  is_final      boolean        yes       false     true = ket qua chinh thuc, dung de settle
-  reported_at   timestamptz    yes       now()
-  finalized_at  timestamptz    no        -         Thoi diem finalize
+  result_data   jsonb          NOT NULL  -         Ket qua chi tiet
+  reported_by   result_source  NOT NULL  system    system hoac user
+  reporter_id   uuid           NULL      -         Ai bao ket qua
+  is_final      boolean        NOT NULL  false     Ket qua chinh thuc?
+  reported_at   timestamptz    NOT NULL  now()
+  finalized_at  timestamptz    NULL      -         Thoi diem finalize
+
+  Data thuc te:
+  {
+    "id": "50000000-0000-0000-0000-000000000001",
+    "contract_id": "30000000-0000-0000-0000-000000000001",
+    "result_data": {
+      "score": "1-0",
+      "winner_id": "10000000-0000-0000-0000-000000000027",
+      "loser_move": "rock",
+      "winner_move": "paper",
+      "rounds_played": 1
+    },
+    "reported_by": "system",
+    "reporter_id": null,
+    "is_final": true,
+    "reported_at": "2025-12-13T11:39:30.305244+00:00",
+    "finalized_at": "2025-12-13T11:44:30.305244+00:00"
+  }
+
+  result_data fields (RPS): winner_id, score, winner_move, loser_move, rounds_played
 
 
 --- contract_consents (Dong thuan / Khieu nai) ---
 
-  Column        Type         Required  Default  Mo ta
-  ---------------------------------------------------------------------------------
+  Dong thuan ket qua. Moi ben phai consent truoc khi settle.
+
+  Column        Type         Null      Default  Mo ta
+  -----------------------------------------------------------------------------------------
   id            uuid         PK        auto
   contract_id   uuid         FK        -        -> contract_instances.id
-  user_id       uuid         yes       -        User dong thuan
-  consented     boolean      yes       -        true=dong y, false=khieu nai (trigger dispute)
-  reason        text         no        -        Ly do khieu nai (bat buoc khi consented=false)
-  signature     varchar      no        -        EIP-712 signature (Phase 1+)
-  consented_at  timestamptz  yes       now()
+  user_id       uuid         NOT NULL  -        User
+  consented     boolean      NOT NULL  -        true=dong y, false=khieu nai
+  reason        text         NULL      -        Ly do khieu nai
+  signature     varchar      NULL      -        Wallet signature (Phase 1+)
+  consented_at  timestamptz  NOT NULL  now()
+
+  Data thuc te:
+  {
+    "id": "60000000-0001-0000-0000-000000000001",
+    "contract_id": "30000000-0000-0000-0000-000000000001",
+    "user_id": "10000000-0000-0000-0000-000000000002",
+    "consented": true,
+    "reason": null,
+    "signature": null,
+    "consented_at": "2025-12-13T11:41:30.305244+00:00"
+  }
 
 
 --- contract_settlements (Thanh toan / chuyen point) ---
 
-  Column           Type         Required  Default  Mo ta
-  ---------------------------------------------------------------------------------
+  Giao dich chuyen point khi thanh toan.
+
+  Column           Type         Null      Default  Mo ta
+  -----------------------------------------------------------------------------------------
   id               uuid         PK        auto
   contract_id      uuid         FK        -        -> contract_instances.id
-  from_user_id     uuid         yes       -        Nguoi gui (Escrow: 00000000-...-000000000000)
-  to_user_id       uuid         yes       -        Nguoi nhan (Treasury: 00000000-...-000000000001)
-  amount           numeric      yes       -        So point chuyen
-  point_type       point_type   yes       -        ix_point / ix_free_point
-  settlement_type  varchar      yes       reward   reward / fee / refund
-  fee_amount       numeric      yes       0        Phi platform
-  tx_hash          varchar      no        -        Transaction hash (Phase 1+)
-  settled_at       timestamptz  yes       now()
+  from_user_id     uuid         NOT NULL  -        Nguoi gui
+  to_user_id       uuid         NOT NULL  -        Nguoi nhan
+  amount           numeric      NOT NULL  -        So point
+  point_type       point_type   NOT NULL  -        Loai point
+  settlement_type  varchar      NOT NULL  reward   reward / fee / refund
+  fee_amount       numeric      NOT NULL  0        Phi platform
+  tx_hash          varchar      NULL      -        TX hash (Phase 1+)
+  settled_at       timestamptz  NOT NULL  now()
+
+  System UUIDs:
+    ESCROW:   00000000-0000-0000-0000-000000000000  (giu point khi user join)
+    TREASURY: 00000000-0000-0000-0000-000000000001  (ngan quy platform nhan phi)
+
+  Data thuc te:
+  {
+    "id": "70000000-0001-0000-0000-000000000001",
+    "contract_id": "30000000-0000-0000-0000-000000000001",
+    "from_user_id": "00000000-0000-0000-0000-000000000000",
+    "to_user_id": "10000000-0000-0000-0000-000000000027",
+    "amount": 114.0,
+    "point_type": "ix_free_point",
+    "settlement_type": "reward",
+    "fee_amount": 6.0,
+    "tx_hash": null,
+    "settled_at": "2025-12-13T11:44:30.305244+00:00"
+  }
+
+  Vi du tren: Escrow tra 114 point cho winner, phi platform 6 point (tong escrow 120, fee 5%).
 
 
 --- point_balances (So du point cua user) ---
 
-  Column      Type         Required  Default  Mo ta
-  ---------------------------------------------------------------------------------
+  Moi user co 2 records: ix_point va ix_free_point.
+
+  Column      Type         Null      Default  Mo ta
+  -----------------------------------------------------------------------------------------
   id          uuid         PK        auto
-  user_id     uuid         yes       -        User ID
-  point_type  point_type   yes       -        ix_point / ix_free_point
-  balance     numeric      yes       0        So du hien tai
-  updated_at  timestamptz  yes       now()
+  user_id     uuid         NOT NULL  -
+  point_type  point_type   NOT NULL  -        ix_point / ix_free_point
+  balance     numeric      NOT NULL  0        So du
+  updated_at  timestamptz  NOT NULL  now()
+
+  Data thuc te:
+  {
+    "user_id": "10000000-0000-0000-0000-000000000003",
+    "point_type": "ix_point",
+    "balance": 8617.94,
+    "updated_at": "2026-03-22T11:29:44.344251+00:00"
+  }
 
 
---- public_ledger (VIEW - read-only, cho transparency) ---
+--- public_ledger (VIEW - read-only) ---
+
+  View tong hop tat ca thong tin contract. Dung cho trang lich su / public transparency.
 
   Column              Type              Mo ta
-  ---------------------------------------------------------------------------------
+  -----------------------------------------------------------------------------------------
   contract_id         uuid
-  contract_type_name  varchar           Ten loai hop dong
-  contract_type       contract_type
-  contract_status     contract_status
-  is_on_chain         boolean
+  contract_type_name  varchar           Ten template
+  contract_type       contract_type     Loai
+  contract_status     contract_status   Trang thai
+  is_on_chain         boolean           Ghi blockchain?
   created_at          timestamptz
   activated_at        timestamptz
   completed_at        timestamptz
   settled_at          timestamptz
   tx_hash             varchar
-  parties             jsonb             Mang cac ben tham gia
+  parties             jsonb             Array ben tham gia
   result              jsonb             Ket qua
-  settlements         jsonb             Cac giao dich thanh toan
+  settlements         jsonb             Array thanh toan
 
-
-2.3 System UUIDs
-----------------
-  ESCROW:   00000000-0000-0000-0000-000000000000
-  TREASURY: 00000000-0000-0000-0000-000000000001
+  Data thuc te:
+  {
+    "contract_id": "30000000-0000-0000-0000-000000000066",
+    "contract_type_name": "RPS Casual Lobby 2",
+    "contract_type": "rps",
+    "contract_status": "created",
+    "is_on_chain": false,
+    "created_at": "2026-03-22T11:19:30.535072+00:00",
+    "parties": [
+      { "role": "worker", "user_id": "...", "escrow_type": "ix_point", "escrow_amount": 1520.0 },
+      { "role": "client", "user_id": "...", "escrow_type": "ix_point", "escrow_amount": 1520.0 }
+    ],
+    "result": null,
+    "settlements": null
+  }
 
 
 ================================================================
-3. API DESIGN
+4. API DESIGN
 ================================================================
 
-3.1 REST API (Auto-generated - CRUD cho moi table)
----------------------------------------------------
+4.1 Overview
+------------
 
-Base URL: https://veoillsstewpnvmhxmlx.supabase.co/rest/v1
+Supabase tu tao REST API cho moi table. FE goi truc tiep qua HTTP.
 
-  Doc du lieu (GET):
+  Endpoint                Methods                 Mo ta
+  -----------------------------------------------------------------------
+  /contract_templates     GET POST PATCH DELETE    Templates (Admin)
+  /contract_instances     GET POST PATCH DELETE    Instances
+  /contract_parties       GET POST PATCH DELETE    Parties
+  /contract_results       GET POST PATCH DELETE    Results
+  /contract_consents      GET POST PATCH DELETE    Consents
+  /contract_settlements   GET POST PATCH DELETE    Settlements
+  /point_balances         GET POST PATCH DELETE    Balances
+  /public_ledger          GET                      Public view (read-only)
+  /rpc/register_player    POST                     Dang ky player
+  /rpc/create_contract    POST                     Tao contract
+  /rpc/join_contract      POST                     Join contract
+  /rpc/activate_contract  POST                     Activate contract
+  /rpc/settle_contract    POST                     Settle contract
 
-    # Lay tat ca templates dang active
-    GET /contract_templates?is_active=eq.true&select=*
-
-    # Lay instance theo ID, kem template info
-    GET /contract_instances?id=eq.{uuid}&select=*,contract_templates(name,type,conditions)
-
-    # Lay parties cua 1 contract
-    GET /contract_parties?contract_id=eq.{uuid}&select=*
-
-    # Lay ket qua
-    GET /contract_results?contract_id=eq.{uuid}&select=*
-
-    # Lay consents
-    GET /contract_consents?contract_id=eq.{uuid}&select=*
-
-    # Lay settlements
-    GET /contract_settlements?contract_id=eq.{uuid}&select=*
-
-    # Lay balance cua user
-    GET /point_balances?user_id=eq.{uuid}&select=*
-
-    # Public ledger (read-only view)
-    GET /public_ledger?select=*&order=created_at.desc&limit=50
-
-  Query operators:
-
-    eq    =          GET /contract_instances?status=eq.active
-    neq   !=         GET /contract_templates?type=neq.custom
-    gt    >          GET /point_balances?balance=gt.100
-    gte   >=
-    lt    <
-    lte   <=
-    in    IN(...)    GET /contract_instances?status=in.(created,active)
-    is    IS NULL    GET /contract_instances?tx_hash=is.null
-
-  Pagination & Ordering:
-
-    GET /public_ledger?select=*&order=created_at.desc&limit=20&offset=0
-
-    Response header Content-Range chua tong so records
-    (can them header: Prefer: count=exact)
+  QUAN TRONG: Cac thao tac business logic (tao, join, activate, settle)
+  -> goi RPC (muc 4). Khong POST/PATCH truc tiep vao tables.
 
 
-3.2 RPC Functions (Business Logic)
------------------------------------
+4.2 Query Syntax (cho GET requests)
+------------------------------------
 
-  LUU Y: FE nen goi RPC thay vi POST/PATCH truc tiep vao tables.
-  Cac function nay xu ly logic phuc tap (escrow, state transitions...).
+  Filtering:
+    eq    =          ?status=eq.active
+    neq   !=         ?type=neq.custom
+    gt    >          ?balance=gt.100
+    gte   >=         ?fee_rate=gte.5
+    lt    <          ?balance=lt.50
+    lte   <=         ?escrow_amount=lte.1000
+    in    IN         ?status=in.(created,active)
+    is    IS NULL    ?tx_hash=is.null
+    like  LIKE       ?name=like.*Casual*
+    ilike ILIKE      ?name=ilike.*casual*
 
-  --- register_player (Dang ky player moi) ---
+  Select:
+    ?select=id,name,type,fee_rate
+    ?select=*,contract_templates(name,type)         // JOIN relations
 
-    POST /rest/v1/rpc/register_player
-    Content-Type: application/json
+  Order:
+    ?order=created_at.desc
 
+  Pagination:
+    ?limit=20&offset=0
+    Header: Prefer: count=exact  ->  Response: Content-Range: 0-19/156
+
+
+4.3 API chi tiet + Request/Response thuc te
+--------------------------------------------
+
+  --- GET: Lay templates active ---
+
+    GET /rest/v1/contract_templates?is_active=eq.true&select=*
+
+    Response 200:
+    [
+      {
+        "id": "20000000-0000-0000-0000-000000000001",
+        "name": "RPS Casual Lobby 1",
+        "type": "rps",
+        "conditions": { "rounds": 1, "max_bet": 100, "min_bet": 10, "timeout_seconds": 15 },
+        "reward_rules": { "winner_pct": 95, "draw_refund": true },
+        "fee_rate": 3.0,
+        "is_active": true,
+        ...
+      }
+    ]
+
+
+  --- GET: Lay contract kem template + parties + result ---
+
+    GET /rest/v1/contract_instances?id=eq.{uuid}&select=*,contract_templates(name,type,conditions,fee_rate),contract_parties(user_id,role,escrow_amount,escrow_status),contract_results(result_data,is_final)
+
+    Response 200:
+    [
+      {
+        "id": "30000000-...",
+        "status": "settled",
+        "contract_templates": {
+          "name": "RPS Casual Lobby 2",
+          "type": "rps",
+          "conditions": { "rounds": 1, "max_bet": 100, "min_bet": 10, "timeout_seconds": 15 },
+          "fee_rate": 3.0
+        },
+        "contract_parties": [
+          { "user_id": "...", "role": "challenger", "escrow_amount": 60.0, "escrow_status": "released" },
+          { "user_id": "...", "role": "opponent", "escrow_amount": 60.0, "escrow_status": "released" }
+        ],
+        "contract_results": [
+          { "result_data": { "score": "1-0", "winner_id": "...", "winner_move": "paper", "loser_move": "rock" }, "is_final": true }
+        ]
+      }
+    ]
+
+
+  --- GET: Lay contracts cua 1 user ---
+
+    GET /rest/v1/contract_parties?user_id=eq.{user_id}&select=*,contract_instances(id,status,created_at,metadata,contract_templates(name,type))&order=joined_at.desc
+
+
+  --- GET: Lay balance user ---
+
+    GET /rest/v1/point_balances?user_id=eq.{user_id}&select=*
+
+    Response 200:
+    [
+      { "user_id": "...", "point_type": "ix_point", "balance": 8617.94, "updated_at": "..." },
+      { "user_id": "...", "point_type": "ix_free_point", "balance": 2500.00, "updated_at": "..." }
+    ]
+
+
+  --- GET: Public ledger ---
+
+    GET /rest/v1/public_ledger?select=*&order=created_at.desc&limit=20&offset=0
+
+    Response 200:
+    [
+      {
+        "contract_id": "30000000-...",
+        "contract_type_name": "RPS Casual Lobby 2",
+        "contract_type": "rps",
+        "contract_status": "created",
+        "parties": [
+          { "role": "worker", "user_id": "...", "escrow_amount": 1520.0 },
+          { "role": "client", "user_id": "...", "escrow_amount": 1520.0 }
+        ],
+        "result": null,
+        "settlements": null
+      }
+    ]
+
+
+  --- POST: Consent (dong y ket qua) ---
+
+    POST /rest/v1/contract_consents
+    Header: Prefer: return=representation
+
+    Request:
     {
-      "p_user_id": "uuid",                  // required
-      "p_starting_ix_points": 1000,          // optional
-      "p_welcome_free_points": 500           // optional
+      "contract_id": "30000000-0000-0000-0000-000000000001",
+      "user_id": "10000000-0000-0000-0000-000000000002",
+      "consented": true
+    }
+
+    Response 201:
+    [
+      {
+        "id": "auto-generated-uuid",
+        "contract_id": "30000000-...",
+        "user_id": "10000000-...",
+        "consented": true,
+        "reason": null,
+        "consented_at": "2026-03-27T10:00:00.000000+00:00"
+      }
+    ]
+
+
+  --- POST: Dispute (khieu nai ket qua) ---
+
+    POST /rest/v1/contract_consents
+    Header: Prefer: return=representation
+
+    Request:
+    {
+      "contract_id": "30000000-0000-0000-0000-000000000001",
+      "user_id": "10000000-0000-0000-0000-000000000002",
+      "consented": false,
+      "reason": "Toi khong dong y ket qua, co van de ve lag"
     }
 
 
-  --- create_contract (Tao contract instance tu template) ---
+================================================================
+5. RPC FUNCTIONS
+================================================================
 
-    POST /rest/v1/rpc/create_contract
-    Content-Type: application/json
-
-    {
-      "p_template_id": "uuid",              // required - template nao
-      "p_metadata": { "room_id": "..." }    // optional - data mo rong
-    }
-
-    Returns: UUID cua contract instance moi.
+  Business logic phuc tap (escrow, state transitions, balance updates).
+  FE goi RPC, khong thao tac truc tiep tren tables.
 
 
-  --- join_contract (Tham gia contract - ky quy escrow) ---
+5.1 register_player
+-------------------
+  Dang ky player moi -> tao 2 records point_balances.
 
-    POST /rest/v1/rpc/join_contract
-    Content-Type: application/json
+  POST /rest/v1/rpc/register_player
 
-    {
-      "p_contract_id": "uuid",              // required
-      "p_user_id": "uuid",                  // required
-      "p_role": "challenger",               // required - challenger/opponent/worker/client/participant
-      "p_escrow_amount": 50,                // required - so point ky quy
-      "p_escrow_type": "ix_point",          // required - ix_point / ix_free_point
-      "p_chain_record_choice": true         // optional - chi khi template policy=optional
-    }
+  Request:
+  {
+    "p_user_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "p_starting_ix_points": 1000,
+    "p_welcome_free_points": 500
+  }
 
-    Logic: Tru balance user -> tao record trong contract_parties.
-
-
-  --- activate_contract (Kich hoat contract - du nguoi) ---
-
-    POST /rest/v1/rpc/activate_contract
-    Content-Type: application/json
-
-    {
-      "p_contract_id": "uuid"               // required
-    }
-
-    Logic: Kiem tra du parties -> chuyen status created -> active.
+  Param                    Type     Required   Mo ta
+  p_user_id                uuid     Yes        User ID
+  p_starting_ix_points     numeric  No         IX Points ban dau
+  p_welcome_free_points    numeric  No         Free Points chao mung
 
 
-  --- settle_contract (Thanh toan contract) ---
+5.2 create_contract
+-------------------
+  Tao contract instance moi tu template.
 
-    POST /rest/v1/rpc/settle_contract
-    Content-Type: application/json
+  POST /rest/v1/rpc/create_contract
 
-    {
-      "p_contract_id": "uuid"               // required
-    }
+  Request:
+  {
+    "p_template_id": "20000000-0000-0000-0000-000000000001",
+    "p_metadata": { "room_id": "room-abc-123", "game_mode": "casual" }
+  }
 
-    Logic: Doc result -> tinh fee -> chuyen point -> tao settlement records -> status -> settled.
+  Param           Type    Required   Mo ta
+  p_template_id   uuid    Yes        Template nao
+  p_metadata      jsonb   No         Data mo rong
+
+  Response: UUID contract instance moi.
+
+  Noi bo: Kiem tra template active -> tao instance status=created -> set chain_record theo policy.
 
 
-3.3 Realtime (WebSocket)
--------------------------
+5.3 join_contract
+-----------------
+  Tham gia contract — tru point, tao record parties.
 
-  Supabase cung cap realtime subscriptions qua WebSocket.
-  FE co the subscribe de nhan updates:
+  POST /rest/v1/rpc/join_contract
 
-    import { createClient } from '@supabase/supabase-js'
+  Request:
+  {
+    "p_contract_id": "30000000-0000-0000-0000-000000000001",
+    "p_user_id": "10000000-0000-0000-0000-000000000002",
+    "p_role": "challenger",
+    "p_escrow_amount": 50,
+    "p_escrow_type": "ix_point",
+    "p_chain_record_choice": null
+  }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  Param                  Type        Required   Mo ta
+  p_contract_id          uuid        Yes        Contract nao
+  p_user_id              uuid        Yes        User join
+  p_role                 varchar     Yes        challenger/opponent/worker/client/participant
+  p_escrow_amount        numeric     Yes        So point ky quy
+  p_escrow_type          point_type  Yes        ix_point hoac ix_free_point
+  p_chain_record_choice  boolean     No         Chi khi template policy=optional
 
-    // Subscribe thay doi tren contract_instances
-    const channel = supabase
-      .channel('contract-updates')
+  Noi bo: Kiem tra status=created -> chua join -> balance du -> bet trong [min_bet,max_bet]
+          -> tru balance -> tao party escrow_status=held.
+
+
+5.4 activate_contract
+---------------------
+  Kich hoat contract khi du nguoi.
+
+  POST /rest/v1/rpc/activate_contract
+
+  Request:
+  {
+    "p_contract_id": "30000000-0000-0000-0000-000000000001"
+  }
+
+  Param           Type   Required   Mo ta
+  p_contract_id   uuid   Yes        Contract nao
+
+  Noi bo: Kiem tra status=created -> du parties -> status -> active, set activated_at.
+
+
+5.5 settle_contract
+-------------------
+  Thanh toan — chuyen point cho winner, thu phi.
+
+  POST /rest/v1/rpc/settle_contract
+
+  Request:
+  {
+    "p_contract_id": "30000000-0000-0000-0000-000000000001"
+  }
+
+  Param           Type   Required   Mo ta
+  p_contract_id   uuid   Yes        Contract nao
+
+  Noi bo:
+    1. Doc result (is_final=true)
+    2. Tinh:
+       - total_escrow = tong escrow_amount cac parties
+       - fee = total_escrow x fee_rate / 100
+       - winner_amount = total_escrow - fee
+    3. Neu draw: refund het, fee = 0
+    4. Tao settlement records:
+       - reward: Escrow -> Winner
+       - fee: Escrow -> Treasury
+       - refund: Escrow -> User (neu draw)
+    5. Cap nhat point_balances
+    6. Status -> settled, set settled_at
+
+  Vi du thuc te (2 players x 60 pts, fee 5%):
+    Settlement  From              To      Amount  Fee
+    reward      Escrow(000...000) Winner  114.0   6.0
+
+
+================================================================
+6. REALTIME SUBSCRIPTIONS
+================================================================
+
+  FE subscribe WebSocket de nhan live updates:
+
+    // Theo doi trang thai 1 contract
+    supabase
+      .channel('my-contract')
       .on('postgres_changes', {
-        event: '*',           // INSERT, UPDATE, DELETE
+        event: 'UPDATE',
         schema: 'public',
         table: 'contract_instances',
-        filter: 'id=eq.{contract_id}'
+        filter: `id=eq.${contractId}`
       }, (payload) => {
-        console.log('Contract updated:', payload)
+        // payload.new.status -> 'active', 'completed', 'settled'...
       })
       .subscribe()
 
-  Tables co the subscribe:
-    contract_instances, contract_parties, contract_results,
-    contract_consents, contract_settlements, point_balances
+    // Co nguoi join
+    supabase
+      .channel('party-joins')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'contract_parties',
+        filter: `contract_id=eq.${contractId}`
+      }, (payload) => {
+        // payload.new -> { user_id, role, escrow_amount }
+      })
+      .subscribe()
+
+    // Balance thay doi
+    supabase
+      .channel('my-balance')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'point_balances',
+        filter: `user_id=eq.${userId}`
+      }, (payload) => {
+        // payload.new.balance -> so du moi
+      })
+      .subscribe()
 
 
 ================================================================
-4. FLOW MAU: RPS MATCH (Rock-Paper-Scissors)
+7. FULL FLOW EXAMPLE
 ================================================================
 
-  1. FE: GET /contract_templates?is_active=eq.true&type=eq.rps
-     -> Lay danh sach template RPS
+  RPS Match: Player A vs Player B, bet 50 pts, fee 3%
 
-  2. FE: POST /rpc/create_contract { template_id }
-     -> Tao contract instance (status=created)
+  Step  Ai goi   API                                                    Ket qua
+  ----  -------  ----------------------------------------------------   -------------------
+   1    FE       GET /contract_templates?is_active=eq.true&type=eq.rps   Danh sach lobby
+   2    FE       POST /rpc/create_contract { template_id }               -> status: created
+   3    FE       POST /rpc/join_contract { user_A, challenger, 50 }      A bi tru 50 pts
+   4    FE       POST /rpc/join_contract { user_B, opponent, 50 }        B bi tru 50 pts
+   5    FE       POST /rpc/activate_contract { contract_id }             -> status: active
+   6    Server   POST /contract_results { result_data, is_final:true }   -> status: completed
+   7    FE       POST /contract_consents { user_A, consented:true }      A dong y
+   8    FE       POST /contract_consents { user_B, consented:true }      B dong y
+   9    FE       POST /rpc/settle_contract { contract_id }               -> status: settled
+  10    FE       GET /public_ledger?contract_id=eq.{id}                  Xem ket qua
 
-  3. FE: POST /rpc/join_contract { contract_id, user_A, role=challenger, escrow=50 }
-     -> Player A join, tru 50 point
+  Ket qua thanh toan (B thang):
+    Reward:  Escrow -> Player B:  97 pts
+    Fee:     Escrow -> Treasury:   3 pts
 
-  4. FE: POST /rpc/join_contract { contract_id, user_B, role=opponent, escrow=50 }
-     -> Player B join, tru 50 point
-
-  5. FE: POST /rpc/activate_contract { contract_id }
-     -> Du 2 nguoi -> status=active
-
-  6. [Game server choi xong]
-     Backend: POST /contract_results { contract_id, result_data, is_final=true }
-     -> status=completed
-
-  7. FE: POST /contract_consents { contract_id, user_id, consented=true }
-     -> Ca 2 consent
-
-  8. FE/Backend: POST /rpc/settle_contract { contract_id }
-     -> Thanh toan: winner nhan point, platform nhan fee
-     -> status=settled
-
-  9. FE: GET /public_ledger?contract_id=eq.{uuid}
-     -> Xem ket qua cong khai
+  Ket qua thanh toan (hoa):
+    Refund:  Escrow -> Player A:  50 pts
+    Refund:  Escrow -> Player B:  50 pts
 
 
 ================================================================
-5. SUPABASE JS CLIENT SETUP
+8. FE INTEGRATION CODE
 ================================================================
+
+  Setup:
+
+    npm install @supabase/supabase-js
 
     import { createClient } from '@supabase/supabase-js'
 
-    const supabaseUrl = 'https://veoillsstewpnvmhxmlx.supabase.co'
-    const supabaseAnonKey = '<ANON_KEY>'
+    const supabase = createClient(
+      'https://veoillsstewpnvmhxmlx.supabase.co',
+      '<ANON_KEY>'
+    )
 
-    export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+  Vi du su dung:
 
-    // Vi du: lay templates
-    const { data, error } = await supabase
+    // Lay templates
+    const { data: templates } = await supabase
       .from('contract_templates')
       .select('*')
       .eq('is_active', true)
 
-    // Vi du: goi RPC
-    const { data, error } = await supabase
-      .rpc('create_contract', {
-        p_template_id: 'uuid-here',
-        p_metadata: { room_id: 'abc' }
-      })
+    // Tao contract
+    const { data: contractId } = await supabase.rpc('create_contract', {
+      p_template_id: 'template-uuid',
+      p_metadata: { room_id: 'room-123' }
+    })
+
+    // Join contract
+    const { error } = await supabase.rpc('join_contract', {
+      p_contract_id: contractId,
+      p_user_id: userId,
+      p_role: 'challenger',
+      p_escrow_amount: 50,
+      p_escrow_type: 'ix_point'
+    })
+
+    // Lay balance
+    const { data: balances } = await supabase
+      .from('point_balances')
+      .select('*')
+      .eq('user_id', userId)
+
+    // Lay contract chi tiet kem relations
+    const { data: contract } = await supabase
+      .from('contract_instances')
+      .select(`
+        *,
+        contract_templates(name, type, conditions, fee_rate),
+        contract_parties(user_id, role, escrow_amount, escrow_status),
+        contract_results(result_data, is_final),
+        contract_consents(user_id, consented)
+      `)
+      .eq('id', contractId)
+      .single()
+
+
+================================================================
+9. ERROR HANDLING
+================================================================
+
+  HTTP Status Codes:
+    200  OK              Thanh cong
+    201  Created         Record moi tao
+    400  Bad Request     Sai params
+    401  Unauthorized    Token het han -> refresh
+    403  Forbidden       Khong co quyen
+    409  Conflict        Duplicate / constraint
+    422  Unprocessable   RPC raise exception
+
+  Error Response:
+  {
+    "code": "PGRST116",
+    "details": null,
+    "hint": null,
+    "message": "The result contains 0 rows"
+  }
+
+  Xu ly error tu RPC:
+
+    const { data, error } = await supabase.rpc('join_contract', { ... })
+
+    if (error) {
+      // error.message co the la:
+      // "Insufficient balance"    -> Khong du point
+      // "Contract not found"      -> Hop dong khong ton tai
+      // "Already joined"          -> Da tham gia roi
+      // "Bet out of range"        -> So bet ngoai min/max
+      // "Template not active"     -> Template da tat
+      console.error(error.message)
+    }
+
+
+================================================================
+10. FE UI REQUIREMENTS (tu Spec)
+================================================================
+
+10.1 Blockchain Recording — Hien thi theo policy
+-------------------------------------------------
+
+  He thong ghi blockchain co 2 cap:
+  Admin dat policy tren template -> User chon khi join (neu optional).
+
+  FE can hien thi khac nhau tuy chain_record_policy cua template:
+
+    Policy      FE hien thi                                          User interaction
+    ----------  ---------------------------------------------------  ----------------------------
+    required    Notice: "Hop dong nay se duoc ghi tren blockchain"   Khong co toggle, chi thong bao
+    optional    Toggle/checkbox: "Ghi hop dong len blockchain"       User bat/tat -> truyen vao
+                + text tu chain_record_description                   p_chain_record_choice khi join
+    off         KHONG HIEN THI GI                                    Khong co
+
+  Logic xac dinh chain_record tren instance:
+
+    Template Policy   User Choice          chain_record
+    ----------------  -------------------  ------------
+    required          (khong co)           true
+    optional          true                 true
+    optional          false                false
+    optional          null (khong chon)    false
+    off               (khong co)           false
+
+  Luu y: Chon ghi on-chain co the phat sinh phi gas (TBD).
+         Thay doi policy KHONG anh huong cac contract da tao, chi ap dung cho contract moi.
+
+
+10.2 Contract Lifecycle — Hien thi trang thai
+----------------------------------------------
+
+    Created   -> "Dang cho nguoi choi"
+    Active    -> "Dang dien ra"
+    Completed -> "Da co ket qua — cho xac nhan"
+    Disputed  -> "Dang khieu nai — cho admin xu ly"
+    Resolved  -> "Khieu nai da giai quyet — cho thanh toan"
+    Settled   -> "Da hoan tat"
+
+
+10.3 Result & Consent Flow — FE can xu ly
+------------------------------------------
+
+  Normal Flow:
+    1. Server bao ket qua   -> FE nhan realtime update (status -> completed)
+    2. Hien thi ket qua     -> "Ban thang/thua/hoa"
+    3. Hien thi nut         -> [Dong y ket qua] hoac [Khieu nai]
+    4. User nhan Dong y     -> POST /contract_consents { consented: true }
+    5. Ca 2 dong y          -> Co the settle
+    6. Neu timeout (timeout_seconds tu template conditions)
+       -> Tu dong consent (backend xu ly)
+
+  Dispute Flow:
+    1. User nhan Khieu nai  -> Hien thi form nhap ly do
+    2. Submit               -> POST /contract_consents { consented: false, reason: "..." }
+    3. Status -> disputed   -> Hien thi: "Dang cho admin xu ly"
+    4. Admin resolve        -> Status -> resolved -> settled
+    5. FE nhan realtime     -> Hien thi ket qua cuoi cung
+
+
+10.4 Public Ledger — Hien thi cong khai
+-----------------------------------------
+
+  Trang public ledger can hien thi:
+    Contract ID:             ID (co the rut gon)
+    Contract type:           RPS, Work Reward, Tournament...
+    Parties:                 User IDs (can nhac an danh — TBD)
+    Point transfer amount:   So IX Points / Free Points chuyen
+    Timestamps:              Thoi diem moi lan doi trang thai
+    Result / Status:         Trang thai hien tai va ket qua cuoi
+
+
+10.5 Admin Dashboard — Template Management
+--------------------------------------------
+
+  Man tao/sua template can:
+    - Form fields cho tat ca columns trong contract_templates
+    - Section "Blockchain Recording":
+      - Radio button hoac select: required / optional / off
+      - Khi chon optional: hien thi them text field cho chain_record_description
+    - Chi Admin moi duoc tao/sua template
+
+
+10.6 Settlement Calculation
+---------------------------
+
+  Total Escrow = tong escrow_amount cua tat ca parties
+  Fee          = Total Escrow x (fee_rate / 100)
+  Winner Gets  = Total Escrow - Fee
+
+  Vi du: 2 players x 50 pts, fee_rate = 5%
+    Total Escrow = 100
+    Fee          = 100 x 0.05 = 5
+    Winner Gets  = 100 - 5 = 95
+    Treasury     = 5
+
+  Neu Draw (va draw_refund = true):
+    Refund moi player = escrow_amount goc
+    Fee = 0
+
+
+================================================================
+11. OPEN ITEMS (TBD)
+================================================================
+
+  Cac item chua duoc quyet dinh tu spec.
+  FE KHONG NEN HARDCODE cac gia tri nay — lay tu DB/API.
+
+  Item                       Chi tiet                                           FE anh huong
+  -------------------------  -------------------------------------------------  ------------------------------------
+  Fee rates                  Phi tuy loai contract (hien tai fee_rate tren       Doc tu template, khong hardcode
+                             template)
+  Objection period           Thoi gian cho auto-consent (hien tai                Doc tu template conditions
+                             timeout_seconds trong conditions)
+  Anonymization level        Muc do an danh user tren public ledger             Cho quyet dinh, co the can mask user_id
+  Free Point restrictions    Gioi han contract cho Free Points                  Cho quyet dinh, check payment_type
+  On-chain recording cost    Ai tra phi gas khi user chon ghi on-chain          Cho quyet dinh, co the can hien thi chi phi
+  Templates beyond RPS       Dinh nghia conditions cho work_reward, tournament  Se bo sung them template types
 
 ================================================================
